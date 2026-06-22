@@ -855,55 +855,60 @@
 
         // --- Certificate JSON Verification ---
         window.onload = async function() {
-            const params = new URLSearchParams(window.location.search);
-            const certId = params.get('id');
+    const params = new URLSearchParams(window.location.search);
+    const certId = params.get('id');
 
-            if (certId) {
-                tooltip1.style.opacity = '0'; tooltip1.style.visibility = 'hidden'; ringLetter.classList.remove('active');
-                
-                document.getElementById('dock-cert').style.display = 'flex';
-                openWindow('cert-win');
+    if (certId) {
+        tooltip1.style.opacity = '0'; tooltip1.style.visibility = 'hidden'; ringLetter.classList.remove('active');
+        
+        document.getElementById('dock-cert').style.display = 'flex';
+        openWindow('cert-win');
 
-                try {
-                    const response = await fetch(`certs/${certId}.json`);
-                    
-                    if (!response.ok) {
-                        throw new Error("Certificate data not found.");
-                    }
-
-                    const payload = await response.json();
-
-                    document.getElementById('real-name').innerText = payload.real_name || payload.user;
-                    document.getElementById('user-name').innerText = "@" + payload.user;
-                    
-                    const tierEl = document.getElementById('tier-text');
-                    tierEl.innerText = payload.tier + " TIER";
-                    
-                    if(payload.tier === "Gold") { tierEl.style.color = "#9d4edd"; }
-                    else if(payload.tier === "Silver") { tierEl.style.color = "#4a7bfe"; }
-                    else { tierEl.style.color = "#ff2a5f"; }
-
-                    document.getElementById('qrcode-container').innerHTML = ""; 
-                    new QRCode(document.getElementById("qrcode-container"), {
-                        text: window.location.href, width: 100, height: 100,
-                        colorDark : "#111827", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
-                    });
-
-                    activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
-
-                } catch (e) {
-                    const err = document.getElementById('error-display');
-                    err.style.display = 'block'; 
-                    err.innerText = "❌ مدرک یافت نشد یا شناسه کاربری (Username) نامعتبر است.";
-                }
-            } else {
-                openWindow('guide-win');
-                setTimeout(() => {
-                    tooltip1.style.opacity = '1'; tooltip1.style.visibility = 'visible'; ringLetter.classList.add('active');
-                }, 1500);
+        try {
+            // آدرس مستقیم به فایل در برنچ data (بدون نیاز به بیلد Pages)
+            const repoOwner = "Galaxy-sc";
+            const repoName = "test2";
+            const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/data/certs/${certId}.json`;
+            
+            const response = await fetch(rawUrl);
+            
+            if (!response.ok) {
+                throw new Error("Certificate data not found.");
             }
-            updateDockState();
-        };
+
+            const payload = await response.json();
+
+            document.getElementById('real-name').innerText = payload.real_name || payload.user;
+            document.getElementById('user-name').innerText = "@" + payload.user;
+            
+            const tierEl = document.getElementById('tier-text');
+            tierEl.innerText = payload.tier + " TIER";
+            
+            if(payload.tier === "Gold") { tierEl.style.color = "#9d4edd"; }
+            else if(payload.tier === "Silver") { tierEl.style.color = "#4a7bfe"; }
+            else { tierEl.style.color = "#ff2a5f"; }
+
+            document.getElementById('qrcode-container').innerHTML = ""; 
+            new QRCode(document.getElementById("qrcode-container"), {
+                text: window.location.href, width: 100, height: 100,
+                colorDark : "#111827", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
+            });
+
+            activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
+
+        } catch (e) {
+            const err = document.getElementById('error-display');
+            err.style.display = 'block'; 
+            err.innerText = "❌ مدرک یافت نشد یا شناسه کاربری (Username) نامعتبر است.";
+        }
+    } else {
+        openWindow('guide-win');
+        setTimeout(() => {
+            tooltip1.style.opacity = '1'; tooltip1.style.visibility = 'visible'; ringLetter.classList.add('active');
+        }, 1500);
+    }
+    updateDockState();
+};
     </script>
 </body>
 </html>
