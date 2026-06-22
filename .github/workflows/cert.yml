@@ -39,9 +39,10 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # استفاده از PAT_TOKEN در صورت وجود، در غیر این صورت توکن پیش‌فرض
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          import urllib.request, urllib.parse, json, os, sys, re, time
+          import urllib.request, urllib.parse, urllib.error, json, os, sys, re, time
           
           user = os.environ['USER_INPUT']
           user_id = os.environ['USER_ID']
@@ -66,11 +67,19 @@ jobs:
               try:
                   with urllib.request.urlopen(req) as response:
                       return json.loads(response.read().decode())
+              except urllib.error.HTTPError as e:
+                  print(f"::error::HTTP Error {e.code} on {url}")
+                  if e.code == 403:
+                      error_msg = "❌ سهمیه API به پایان رسیده است. سیستم مسدود شد. لطفا PAT_TOKEN را در بخش Secrets تنظیم کنید."
+                      with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
+                          f.write(f"ERROR_MSG={error_msg}\n")
+                      sys.exit(1)
+                  return None
               except Exception as e:
-                  print(f"::warning::API Error on {url}: {e}")
+                  print(f"::error::Fatal API Error: {e}")
                   return None
 
-          # 1. پیدا کردن کامیت‌ها (بدون نیاز به PR و Issue)
+          # 1. پیدا کردن کامیت‌ها
           commit_query = f"author:{user} org:OWASP"
           commit_url = f"https://api.github.com/search/commits?q={urllib.parse.quote(commit_query)}&per_page=100"
           commit_data = fetch_api(commit_url)
@@ -86,7 +95,7 @@ jobs:
           total_added = 0
           total_removed = 0
           repo_stats = {} 
-          commit_logs = [] # آرایه‌ای برای ذخیره لاگ تک‌تک کامیت‌ها
+          commit_logs = [] 
           
           print(f"[*] Found {total_commits} commits. Deep scanning lines and projects...")
           
@@ -113,20 +122,20 @@ jobs:
                   repo_stats[repo_name]['added'] += added
                   repo_stats[repo_name]['removed'] += removed
               
-              # ثبت لاگ دقیق همین کامیت
-              commit_logs.append(f"- [`{short_sha}`]({html_url}) در **{repo_name}**: `+{added}` / `-{removed}` خط")
+              # فرمت خام بدون بک‌تیک برای جلوگیری از باگ کپی در UI گیت‌هاب
+              commit_logs.append(f"- [{short_sha}]({html_url}) در **{repo_name}**: +{added} / -{removed} خط")
               
               time.sleep(0.2)
           
           total_projects = len(repo_stats)
 
-          # 3. ساخت فاکتور لاگ (Markdown)
+          # 3. ساخت فاکتور لاگ (بدون بک‌تیک در متغیرهای عددی)
           report = "#### 📊 فاکتور شفاف سیستم تله‌متری\n"
-          report += f"> **خلاصه:** `{total_commits}` کامیت در `{total_projects}` پروژه ⟵ (`+{total_added}` خط اضافه / `-{total_removed}` خط حذف)\n\n"
+          report += f"> **خلاصه:** {total_commits} کامیت در {total_projects} پروژه ⟵ (+{total_added} خط اضافه / -{total_removed} خط حذف)\n\n"
           
           report += "**تفکیک پروژه‌های درگیر (Repositories):**\n"
           for repo, stats in repo_stats.items():
-              report += f"- **[{repo}](https://github.com/{repo})**: {stats['commits']} کامیت ⟵ (`+{stats['added']}` / `-{stats['removed']}`)\n"
+              report += f"- **[{repo}](https://github.com/{repo})**: {stats['commits']} کامیت ⟵ (+{stats['added']} / -{stats['removed']})\n"
           
           report += "\n<details>\n"
           report += "<summary><b>🔍 مشاهده جزئیات تک‌تک کامیت‌ها (کلیک کنید)</b></summary>\n\n"
@@ -143,7 +152,6 @@ jobs:
               
           cert_id = user_id
           
-          # ساختار دیتابیس آپدیت شده و بهینه‌سازی شده
           payload = {
               "id": cert_id,
               "user": user, 
@@ -209,6 +217,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
-          gh issue comment $ISSUE --body "❌ **صدور مدرک متوقف شد:**
-          ${{ env.ERROR_MSG }}"
+          gh issue comment $ISSUE --body "${{ env.ERROR_MSG }}"
           gh issue close $ISSUE --reason "not planned"
