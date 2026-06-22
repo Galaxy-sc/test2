@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Deep Scan Commits & Generate Report
+      - name: Deep Scan Commits & Generate Verifiable Report
         id: generate
         env:
           USER_INPUT: ${{ github.actor }} 
@@ -70,24 +70,7 @@ jobs:
                   print(f"::warning::API Error on {url}: {e}")
                   return None
 
-          # 1. گرفتن Issueها و استخراج لیست ۵ ایشوی آخر
-          issue_url = f"https://api.github.com/search/issues?q={urllib.parse.quote('author:'+user+' org:OWASP type:issue')}"
-          issue_data = fetch_api(issue_url)
-          total_issues = issue_data.get('total_count', 0) if issue_data else 0
-          
-          recent_issues = []
-          if issue_data and 'items' in issue_data:
-              for i in issue_data['items'][:5]: # استخراج 5 مورد اول
-                  recent_issues.append(f"- [{i['title']}]({i['html_url']})")
-          time.sleep(1.5)
-
-          # 2. گرفتن PRها
-          pr_url = f"https://api.github.com/search/issues?q={urllib.parse.quote('author:'+user+' org:OWASP type:pr is:merged')}"
-          pr_data = fetch_api(pr_url)
-          total_prs = pr_data.get('total_count', 0) if pr_data else 0
-          time.sleep(1.5)
-
-          # 3. پیدا کردن کامیت‌ها
+          # 1. پیدا کردن کامیت‌ها (بدون نیاز به PR و Issue)
           commit_query = f"author:{user} org:OWASP"
           commit_url = f"https://api.github.com/search/commits?q={urllib.parse.quote(commit_query)}&per_page=100"
           commit_data = fetch_api(commit_url)
@@ -102,19 +85,23 @@ jobs:
           
           total_added = 0
           total_removed = 0
-          repo_stats = {} # دیکشنری برای گروه‌بندی آمار به تفکیک مخزن
+          repo_stats = {} 
+          commit_logs = [] # آرایه‌ای برای ذخیره لاگ تک‌تک کامیت‌ها
           
           print(f"[*] Found {total_commits} commits. Deep scanning lines and projects...")
           
-          # 4. اسکن عمیق خطوط کد به تفکیک پروژه‌ها
+          # 2. اسکن عمیق خطوط کد به تفکیک پروژه‌ها و کامیت‌ها
           for index, item in enumerate(items):
               repo_name = item['repository']['full_name']
               sha = item['sha']
+              html_url = item['html_url']
+              short_sha = sha[:7]
               
               if repo_name not in repo_stats:
                   repo_stats[repo_name] = {'commits': 0, 'added': 0, 'removed': 0}
               
               detail = fetch_api(f"https://api.github.com/repos/{repo_name}/commits/{sha}")
+              added, removed = 0, 0
               if detail and 'stats' in detail:
                   added = detail['stats'].get('additions', 0)
                   removed = detail['stats'].get('deletions', 0)
@@ -126,19 +113,27 @@ jobs:
                   repo_stats[repo_name]['added'] += added
                   repo_stats[repo_name]['removed'] += removed
               
+              # ثبت لاگ دقیق همین کامیت
+              commit_logs.append(f"- [`{short_sha}`]({html_url}) در **{repo_name}**: `+{added}` / `-{removed}` خط")
+              
               time.sleep(0.2)
           
-          # 5. ساخت گزارش لاگ مارک‌داون
-          report = "#### 📊 جزئیات مشارکت‌های تایید شده\n\n"
-          report += "**پروژه‌های درگیر (Repositories):**\n"
-          for repo, stats in repo_stats.items():
-              report += f"- **[{repo}](https://github.com/{repo})**: {stats['commits']} کامیت ⟵ (`+{stats['added']}` خط / `-{stats['removed']}` خط)\n"
-          
-          if recent_issues:
-              report += "\n**آخرین Issue‌های ثبت‌شده:**\n"
-              report += "\n".join(recent_issues) + "\n"
+          total_projects = len(repo_stats)
 
-          # 6. سطح‌بندی و ذخیره
+          # 3. ساخت فاکتور لاگ (Markdown)
+          report = "#### 📊 فاکتور شفاف سیستم تله‌متری\n"
+          report += f"> **خلاصه:** `{total_commits}` کامیت در `{total_projects}` پروژه ⟵ (`+{total_added}` خط اضافه / `-{total_removed}` خط حذف)\n\n"
+          
+          report += "**تفکیک پروژه‌های درگیر (Repositories):**\n"
+          for repo, stats in repo_stats.items():
+              report += f"- **[{repo}](https://github.com/{repo})**: {stats['commits']} کامیت ⟵ (`+{stats['added']}` / `-{stats['removed']}`)\n"
+          
+          report += "\n<details>\n"
+          report += "<summary><b>🔍 مشاهده جزئیات تک‌تک کامیت‌ها (کلیک کنید)</b></summary>\n\n"
+          report += "\n".join(commit_logs)
+          report += "\n</details>\n"
+
+          # 4. سطح‌بندی و ذخیره
           if total_commits >= 50:
               tier = "Gold"
           elif total_commits >= 10:
@@ -148,6 +143,7 @@ jobs:
               
           cert_id = user_id
           
+          # ساختار دیتابیس آپدیت شده و بهینه‌سازی شده
           payload = {
               "id": cert_id,
               "user": user, 
@@ -155,8 +151,7 @@ jobs:
               "tier": tier, 
               "stats": {
                   "merged_commits": str(total_commits),
-                  "pr_count": str(total_prs),
-                  "issue_count": str(total_issues),
+                  "project_count": str(total_projects),
                   "lines_added": str(total_added), 
                   "lines_removed": str(total_removed)
               }
@@ -175,7 +170,6 @@ jobs:
               f.write(f"COUNT={total_commits}\n")
               f.write(f"REAL_NAME={real_name}\n")
               f.write(f"CERT_ID={cert_id}\n")
-              # ذخیره امن متن چندخطی (گزارش کامل)
               f.write("LOG_REPORT<<EOF\n")
               f.write(report)
               f.write("\nEOF\n")
@@ -201,7 +195,7 @@ jobs:
           gh issue comment $ISSUE --body "### 🎉 تبریک! مدرک شما صادر شد.
           **نام ثبت شده:** ${{ env.REAL_NAME }}
           **شناسه یکتا:** \`${{ env.CERT_ID }}\`
-          **سطح:** ${{ env.TIER }} (${{ env.COUNT }} کامیت تایید شده)
+          **سطح:** ${{ env.TIER }}
           
           🔗 [**>> برای مشاهده و دریافت مدرک کلیک کنید <<**](${{ env.CERT_URL }})
           
