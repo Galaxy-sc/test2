@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Fetch Stats via GraphQL & Generate JSON
+      - name: Fetch Hybrid Stats & Generate JSON
         id: generate
         env:
           USER_INPUT: ${{ github.actor }} 
@@ -41,7 +41,7 @@ jobs:
           REPO_NAME: ${{ github.event.repository.name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          import urllib.request, json, os, sys, re
+          import urllib.request, urllib.parse, json, os, sys, re
           
           user = os.environ['USER_INPUT']
           user_id = os.environ['USER_ID']
@@ -55,47 +55,69 @@ jobs:
           name_match = re.search(r'FullName:\s*(.+)', issue_body)
           real_name = name_match.group(1).strip() if name_match else user
           
-          headers = {
+          # هدرهای مجزا برای دو نوع API
+          rest_headers = {
+              'User-Agent': 'OWASP-CRT-REST',
+              'Authorization': f'Bearer {gh_token}',
+              'Accept': 'application/vnd.github+json'
+          }
+          
+          graphql_headers = {
               'Authorization': f'Bearer {gh_token}',
               'Content-Type': 'application/json',
               'User-Agent': 'OWASP-CRT-GraphQL'
           }
+
+          # ---------------------------------------------------------
+          # 1. گرفتن تعداد دقیق کامیت‌ها با REST API (دقیق‌ترین روش)
+          # ---------------------------------------------------------
+          query = f"author:{user} org:OWASP"
+          commit_url = f"https://api.github.com/search/commits?q={urllib.parse.quote(query)}"
           
+          try:
+              req = urllib.request.Request(commit_url, headers=rest_headers)
+              with urllib.request.urlopen(req) as response:
+                  data = json.loads(response.read().decode())
+                  exact_commit_count = data.get('total_count', 0)
+          except Exception as e:
+              print(f"::error::REST API Error: {e}")
+              sys.exit(1)
+
+          if exact_commit_count == 0:
+              with open(os.environ['GITHUB_ENV'], 'a') as f:
+                  f.write(f"ERROR_MSG=کاربر @{user} هیچ کامیتی در پروژه‌های عمومی OWASP ندارد.\n")
+              sys.exit(1)
+
+          # ---------------------------------------------------------
+          # 2. گرفتن آمار خطوط کد، PRها و Issueها با GraphQL
+          # ---------------------------------------------------------
           def run_graphql(query, variables):
               payload = json.dumps({'query': query, 'variables': variables}).encode('utf-8')
-              req = urllib.request.Request('https://api.github.com/graphql', data=payload, headers=headers)
+              req = urllib.request.Request('https://api.github.com/graphql', data=payload, headers=graphql_headers)
               try:
                   with urllib.request.urlopen(req) as response:
                       return json.loads(response.read().decode())
               except Exception as e:
-                  print(f"::error::GraphQL Error: {e}")
-                  with open(os.environ['GITHUB_ENV'], 'a') as f:
-                      f.write("ERROR_MSG=خطا در ارتباط با سرور گراف‌کیوال گیت‌هاب.\n")
-                  sys.exit(1)
+                  print(f"::warning::GraphQL Error (Skipping detailed stats): {e}")
+                  return None
 
-          # 1. گرفتن تعداد کل ایشوها
+          # شمارش Issueها
           issue_query = """
           query($searchQ: String!) {
-            search(query: $searchQ, type: ISSUE, first: 1) {
-              issueCount
-            }
+            search(query: $searchQ, type: ISSUE, first: 1) { issueCount }
           }
           """
           issue_data = run_graphql(issue_query, {"searchQ": f"author:{user} org:OWASP type:issue"})
-          total_issues = issue_data['data']['search']['issueCount']
+          total_issues = issue_data['data']['search']['issueCount'] if issue_data else 0
 
-          # 2. گرفتن آمار دقیق PRها، خطوط کد و کامیت‌ها (با قابلیت صفحه‌بندی برای کاربران بسیار فعال)
+          # شمارش PRها و استخراج خطوط کد
           pr_query = """
           query($searchQ: String!, $cursor: String) {
             search(query: $searchQ, type: ISSUE, first: 100, after: $cursor) {
               issueCount
               pageInfo { hasNextPage endCursor }
               nodes {
-                ... on PullRequest {
-                  additions
-                  deletions
-                  commits { totalCount }
-                }
+                ... on PullRequest { additions deletions }
               }
             }
           }
@@ -104,48 +126,43 @@ jobs:
           has_next_page = True
           cursor = None
           total_prs = 0
-          total_commits = 0
           total_added = 0
           total_removed = 0
 
           while has_next_page:
               pr_data = run_graphql(pr_query, {"searchQ": f"author:{user} org:OWASP type:pr is:merged", "cursor": cursor})
-              search_res = pr_data['data']['search']
+              if not pr_data: break
               
+              search_res = pr_data['data']['search']
               total_prs = search_res['issueCount']
               
               for node in search_res['nodes']:
                   if not node: continue
                   total_added += node.get('additions', 0)
                   total_removed += node.get('deletions', 0)
-                  total_commits += node.get('commits', {}).get('totalCount', 0)
                   
               has_next_page = search_res['pageInfo']['hasNextPage']
               cursor = search_res['pageInfo']['endCursor']
 
-          if total_commits == 0 and total_issues == 0:
-              with open(os.environ['GITHUB_ENV'], 'a') as f:
-                  f.write(f"ERROR_MSG=کاربر @{user} هیچ مشارکتی در پروژه‌های OWASP ندارد.\n")
-              sys.exit(1)
-
-          # سطح‌بندی بر اساس تعداد کامیت
-          if total_commits >= 50:
+          # ---------------------------------------------------------
+          # 3. ارزیابی نهایی و ساخت دیتابیس
+          # ---------------------------------------------------------
+          if exact_commit_count >= 50:
               tier = "Gold"
-          elif total_commits >= 10:
+          elif exact_commit_count >= 10:
               tier = "Silver"
           else:
               tier = "Bronze"
               
           cert_id = user_id
           
-          # ساخت دیتای کامل برای دیتابیس و فرانت‌اند
           payload = {
               "id": cert_id,
               "user": user, 
               "real_name": real_name, 
               "tier": tier, 
               "stats": {
-                  "merged_commits": str(total_commits),
+                  "merged_commits": str(exact_commit_count),
                   "pr_count": str(total_prs),
                   "issue_count": str(total_issues),
                   "lines_added": str(total_added), 
@@ -163,7 +180,7 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a') as f:
               f.write(f"CERT_URL={final_url}\n")
               f.write(f"TIER={tier}\n")
-              f.write(f"COUNT={total_commits}\n")
+              f.write(f"COUNT={exact_commit_count}\n")
               f.write(f"REAL_NAME={real_name}\n")
               f.write(f"CERT_ID={cert_id}\n")
         shell: python
