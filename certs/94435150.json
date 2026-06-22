@@ -2,12 +2,12 @@
   "id": "94435150",
   "user": "Galaxy-sc",
   "real_name": "Meysam Bal-afkan",
-  "tier": "Silver",
+  "tier": "Bronze",
   "stats": {
-    "merged_commits": 12,
-    "pr_count": "--",
-    "issue_count": "--",
-    "lines_added": "--",
-    "lines_removed": "--"
+    "merged_commits": "0",
+    "pr_count": "0",
+    "issue_count": "4",
+    "lines_added": "0",
+    "lines_removed": "0"
   }
 }
