@@ -5,8 +5,7 @@
   "tier": "Silver",
   "stats": {
     "merged_commits": "12",
-    "pr_count": "0",
-    "issue_count": "4",
+    "project_count": "2",
     "lines_added": "780",
     "lines_removed": "312"
   }
