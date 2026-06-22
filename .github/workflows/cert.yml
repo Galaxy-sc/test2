@@ -1,40 +1,8 @@
-name: Generate Secure Certificate (IssueOps)
-
-on:
-  issues:
-    types: [opened]
-
-concurrency:
-  group: cert-request-${{ github.actor }}
-  cancel-in-progress: true
-
-jobs:
-  build-cert:
-    runs-on: ubuntu-latest
-    permissions:
-      issues: write
-      contents: write 
-    
-    steps:
-      - name: Checkout Main Repository
-        uses: actions/checkout@v4
-
-      # دانلود برنچ دیتا در یک پوشه مجزا به نام db_branch
-      - name: Checkout Data Branch
-        uses: actions/checkout@v4
-        with:
-          ref: data 
-          path: db_branch
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-
-      - name: Fetch Commits & Generate JSON
+- name: Fetch Commits & Generate JSON
         id: generate
         env:
-          USER_INPUT: ${{ github.actor }} 
+          USER_INPUT: ${{ github.actor }}
+          USER_ID: ${{ github.actor_id }} # اضافه شدن شناسه عددی ثابت کاربر
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           REPO_OWNER: ${{ github.repository_owner }}
@@ -44,6 +12,7 @@ jobs:
           import urllib.request, urllib.parse, json, os, sys, re
           
           user = os.environ['USER_INPUT']
+          user_id = os.environ['USER_ID'] # دریافت ID
           issue_body = os.environ['ISSUE_BODY']
           issue_title = os.environ['ISSUE_TITLE']
           gh_token = os.environ['GH_TOKEN']
@@ -86,11 +55,12 @@ jobs:
           else:
               tier = "Bronze"
               
-          cert_id = user.lower()
+          # شناسه مدرک حالا شناسه عددی غیرقابل جعل گیت‌هاب است
+          cert_id = user_id
           
           payload = {
               "id": cert_id,
-              "user": user, 
+              "user": user, # یوزرنیم فعلی هم ذخیره می‌شود تا در مدرک نمایش داده شود
               "real_name": real_name, 
               "tier": tier, 
               "stats": {
@@ -102,7 +72,6 @@ jobs:
               }
           }
           
-          # ذخیره فایل در پوشه برنچ دیتا
           os.makedirs("db_branch/certs", exist_ok=True)
           file_path = f"db_branch/certs/{cert_id}.json"
           with open(file_path, "w", encoding="utf-8") as f:
@@ -117,39 +86,3 @@ jobs:
               f.write(f"REAL_NAME={real_name}\n")
               f.write(f"CERT_ID={cert_id}\n")
         shell: python
-
-      - name: Commit and Push JSON to Data Branch
-        if: success() && env.CERT_URL != ''
-        run: |
-          # وارد پوشه برنچ دیتا می‌شویم
-          cd db_branch
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add certs/${{ env.CERT_ID }}.json
-          git commit -m "db(crt): save cert data for @${{ github.actor }} [skip ci]" || echo "No changes to commit"
-          git pull --rebase origin data
-          git push origin data
-
-      - name: Comment Success & Close Issue
-        if: success() && env.CERT_URL != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ github.event.issue.number }}
-        run: |
-          gh issue comment $ISSUE --body "### 🎉 تبریک! مدرک شما صادر شد.
-          **نام ثبت شده:** ${{ env.REAL_NAME }}
-          **شناسه یکتا:** \`${{ env.CERT_ID }}\`
-          **سطح:** ${{ env.TIER }} (${{ env.COUNT }} کامیت تایید شده)
-          
-          🔗 [**>> برای مشاهده و دریافت مدرک کلیک کنید <<**](${{ env.CERT_URL }})"
-          gh issue close $ISSUE --reason "completed"
-
-      - name: Comment Failure & Close Issue
-        if: failure() && env.ERROR_MSG != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ github.event.issue.number }}
-        run: |
-          gh issue comment $ISSUE --body "❌ **صدور مدرک متوقف شد:**
-          ${{ env.ERROR_MSG }}"
-          gh issue close $ISSUE --reason "not planned"
