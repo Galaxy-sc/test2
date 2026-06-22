@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Deep Scan Commits & Generate Verifiable Report
+      - name: GraphQL Deep Scan & Generate Report
         id: generate
         env:
           USER_INPUT: ${{ github.actor }} 
@@ -39,10 +39,9 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
-          # استفاده از PAT_TOKEN در صورت وجود، در غیر این صورت توکن پیش‌فرض
           GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          import urllib.request, urllib.parse, urllib.error, json, os, sys, re, time
+          import urllib.request, json, os, sys, re, time
           
           user = os.environ['USER_INPUT']
           user_id = os.environ['USER_ID']
@@ -55,82 +54,142 @@ jobs:
               
           name_match = re.search(r'FullName:\s*(.+)', issue_body)
           real_name = name_match.group(1).strip() if name_match else user
+
+          # --- 1. Anti-Spam & Cooldown System (24 Hours) ---
+          cooldown_seconds = 24 * 3600
+          cert_path = f"db_branch/certs/{user_id}.json"
+          if os.path.exists(cert_path):
+              with open(cert_path, "r", encoding="utf-8") as f:
+                  try:
+                      old_data = json.load(f)
+                      last_issued = old_data.get("last_issued", 0)
+                      time_passed = time.time() - last_issued
+                      
+                      if time_passed < cooldown_seconds:
+                          hours_left = int((cooldown_seconds - time_passed) / 3600)
+                          mins_left = int(((cooldown_seconds - time_passed) % 3600) / 60)
+                          error_msg = f"⏳ **محدودیت سیستم:** شما اخیراً مدرک خود را بروزرسانی کرده‌اید. لطفا {hours_left} ساعت و {mins_left} دقیقه دیگر مجدداً تلاش کنید."
+                          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+                              env_file.write(f"ERROR_MSG={error_msg}\n")
+                          sys.exit(1)
+                  except:
+                      pass
+          # -------------------------------------------------
           
           headers = {
-              'User-Agent': 'OWASP-CRT-Agent',
               'Authorization': f'Bearer {gh_token}',
-              'Accept': 'application/vnd.github+json'
+              'Content-Type': 'application/json',
+              'User-Agent': 'OWASP-CRT-GraphQL'
           }
 
-          def fetch_api(url):
-              req = urllib.request.Request(url, headers=headers)
+          def run_graphql(query, variables=None):
+              payload = json.dumps({'query': query, 'variables': variables or {}}).encode('utf-8')
+              req = urllib.request.Request('https://api.github.com/graphql', data=payload, headers=headers)
               try:
                   with urllib.request.urlopen(req) as response:
                       return json.loads(response.read().decode())
-              except urllib.error.HTTPError as e:
-                  print(f"::error::HTTP Error {e.code} on {url}")
-                  if e.code == 403:
-                      error_msg = "❌ سهمیه API به پایان رسیده است. سیستم مسدود شد. لطفا PAT_TOKEN را در بخش Secrets تنظیم کنید."
-                      with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                          f.write(f"ERROR_MSG={error_msg}\n")
-                      sys.exit(1)
-                  return None
               except Exception as e:
-                  print(f"::error::Fatal API Error: {e}")
-                  return None
+                  print(f"::error::GraphQL Error: {e}")
+                  with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
+                      f.write(f"ERROR_MSG=❌ ارتباط با سرور گراف‌کیوال قطع شد. بررسی کنید توکن PAT تنظیم شده باشد.\n")
+                  sys.exit(1)
 
-          # 1. پیدا کردن کامیت‌ها
-          commit_query = f"author:{user} org:OWASP"
-          commit_url = f"https://api.github.com/search/commits?q={urllib.parse.quote(commit_query)}&per_page=100"
-          commit_data = fetch_api(commit_url)
+          # --- 2. دریافت GraphQL Node ID کاربر ---
+          id_query = """query($login: String!) { user(login: $login) { id } }"""
+          id_res = run_graphql(id_query, {"login": user})
           
-          if not commit_data or commit_data.get('total_count', 0) == 0:
+          if not id_res or 'errors' in id_res or not id_res.get('data', {}).get('user'):
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write(f"ERROR_MSG=کاربر @{user} هیچ کامیتی در پروژه‌های عمومی OWASP ندارد.\n")
+                  f.write(f"ERROR_MSG=❌ کاربر @{user} در سیستم گراف‌کیوال گیت‌هاب یافت نشد.\n")
               sys.exit(1)
               
-          total_commits = commit_data.get('total_count', 0)
-          items = commit_data.get('items', [])
+          graphql_author_id = id_res['data']['user']['id']
+
+          # --- 3. کوئری اصلی برای استخراج دیتا ---
+          main_query = """
+          query($login: String!, $authorId: ID!) {
+            rateLimit { cost remaining limit }
+            user(login: $login) {
+              repositoriesContributedTo(first: 100, contributionTypes: [COMMIT]) {
+                edges {
+                  node {
+                    name
+                    owner { login }
+                    defaultBranchRef {
+                      target {
+                        ... on Commit {
+                          history(author: { id: $authorId }, first: 100) {
+                            edges {
+                              node { oid message additions deletions }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          """
           
+          print(f"[*] Fetching deep stats for @{user} via GraphQL...")
+          data_res = run_graphql(main_query, {"login": user, "authorId": graphql_author_id})
+          
+          limit_info = data_res.get('data', {}).get('rateLimit', {})
+          print(f"💸 Query Cost: {limit_info.get('cost')} | 🔋 Remaining: {limit_info.get('remaining')}/{limit_info.get('limit')}")
+
+          contributed_repos = data_res.get('data', {}).get('user', {}).get('repositoriesContributedTo', {}).get('edges', [])
+          
+          total_commits = 0
           total_added = 0
           total_removed = 0
-          repo_stats = {} 
-          commit_logs = [] 
-          
-          print(f"[*] Found {total_commits} commits. Deep scanning lines and projects...")
-          
-          # 2. اسکن عمیق خطوط کد به تفکیک پروژه‌ها و کامیت‌ها
-          for index, item in enumerate(items):
-              repo_name = item['repository']['full_name']
-              sha = item['sha']
-              html_url = item['html_url']
-              short_sha = sha[:7]
+          repo_stats = {}
+          commit_logs = []
+
+          for repo_edge in contributed_repos:
+              repo_node = repo_edge.get('node', {})
+              repo_owner = repo_node.get('owner', {}).get('login', '')
+              repo_name = f"{repo_owner}/{repo_node.get('name', '')}"
               
+              if repo_owner.upper() != 'OWASP':
+                  continue
+                  
+              branch_ref = repo_node.get('defaultBranchRef')
+              if not branch_ref: continue
+                  
+              commit_history = branch_ref.get('target', {}).get('history', {}).get('edges', [])
+              if not commit_history: continue
+
               if repo_name not in repo_stats:
                   repo_stats[repo_name] = {'commits': 0, 'added': 0, 'removed': 0}
-              
-              detail = fetch_api(f"https://api.github.com/repos/{repo_name}/commits/{sha}")
-              added, removed = 0, 0
-              if detail and 'stats' in detail:
-                  added = detail['stats'].get('additions', 0)
-                  removed = detail['stats'].get('deletions', 0)
+
+              for commit_edge in commit_history:
+                  commit = commit_edge['node']
+                  sha = commit['oid'][:7]
+                  added = commit['additions']
+                  removed = commit['deletions']
                   
+                  total_commits += 1
                   total_added += added
                   total_removed += removed
                   
                   repo_stats[repo_name]['commits'] += 1
                   repo_stats[repo_name]['added'] += added
                   repo_stats[repo_name]['removed'] += removed
-              
-              # فرمت خام بدون بک‌تیک برای جلوگیری از باگ کپی در UI گیت‌هاب
-              commit_logs.append(f"- [{short_sha}]({html_url}) در **{repo_name}**: +{added} / -{removed} خط")
-              
-              time.sleep(0.2)
-          
+                  
+                  commit_url = f"https://github.com/{repo_name}/commit/{commit['oid']}"
+                  commit_logs.append(f"- [{sha}]({commit_url}) در **{repo_name}**: +{added} / -{removed} خط")
+
           total_projects = len(repo_stats)
 
-          # 3. ساخت فاکتور لاگ (بدون بک‌تیک در متغیرهای عددی)
-          report = "#### 📊 فاکتور شفاف سیستم تله‌متری\n"
+          if total_commits == 0:
+              with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
+                  f.write(f"ERROR_MSG=کاربر @{user} هیچ کامیت تایید شده‌ای در شاخه اصلی پروژه‌های عمومی OWASP ندارد.\n")
+              sys.exit(1)
+
+          # --- 4. ساخت گزارش نهایی ---
+          report = "#### 📊 فاکتور شفاف سیستم تله‌متری (Powered by GraphQL)\n"
           report += f"> **خلاصه:** {total_commits} کامیت در {total_projects} پروژه ⟵ (+{total_added} خط اضافه / -{total_removed} خط حذف)\n\n"
           
           report += "**تفکیک پروژه‌های درگیر (Repositories):**\n"
@@ -142,13 +201,10 @@ jobs:
           report += "\n".join(commit_logs)
           report += "\n</details>\n"
 
-          # 4. سطح‌بندی و ذخیره
-          if total_commits >= 50:
-              tier = "Gold"
-          elif total_commits >= 10:
-              tier = "Silver"
-          else:
-              tier = "Bronze"
+          # --- 5. ذخیره دیتابیس ---
+          if total_commits >= 50: tier = "Gold"
+          elif total_commits >= 10: tier = "Silver"
+          else: tier = "Bronze"
               
           cert_id = user_id
           
@@ -157,6 +213,7 @@ jobs:
               "user": user, 
               "real_name": real_name, 
               "tier": tier, 
+              "last_issued": int(time.time()),
               "stats": {
                   "merged_commits": str(total_commits),
                   "project_count": str(total_projects),
@@ -175,7 +232,6 @@ jobs:
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
               f.write(f"CERT_URL={final_url}\n")
               f.write(f"TIER={tier}\n")
-              f.write(f"COUNT={total_commits}\n")
               f.write(f"REAL_NAME={real_name}\n")
               f.write(f"CERT_ID={cert_id}\n")
               f.write("LOG_REPORT<<EOF\n")
@@ -200,7 +256,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
-          gh issue comment $ISSUE --body "### 🎉 تبریک! مدرک شما صادر شد.
+          gh issue comment $ISSUE --body "### 🎉 تبریک! مدرک شما صادر/بروزرسانی شد.
           **نام ثبت شده:** ${{ env.REAL_NAME }}
           **شناسه یکتا:** \`${{ env.CERT_ID }}\`
           **سطح:** ${{ env.TIER }}
