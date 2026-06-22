@@ -785,6 +785,7 @@
         }
 
         // --- Telemetry Activation (Redesigned for Commits & System Status) ---
+        // --- Telemetry Activation (Redesigned for Real GitHub Stats) ---
         function activateTelemetry(tier, stats) {
             const badge = document.getElementById('telemetry-status');
             badge.innerText = 'CONNECTED'; badge.classList.add('active');
@@ -795,23 +796,25 @@
                 document.getElementById('bar-commits').style.width = '100%'; 
             }, 500);
 
-            // 2. تغییر وضعیت احراز هویت با رنگ سبز تایید
+            // 2. نمایش تعداد پروژه‌ها
             setTimeout(() => { 
-                const el = document.getElementById('val-identity');
-                el.innerText = 'AUTHENTICATED'; 
-                el.style.color = '#10b981';
-                document.getElementById('bar-identity').style.background = '#10b981';
-                document.getElementById('bar-identity').style.width = '100%'; 
+                document.getElementById('val-projects').innerText = stats.project_count || '0'; 
+                document.getElementById('bar-projects').style.width = '100%'; 
             }, 900);
 
-            // 3. تغییر وضعیت مجوز سیستمی
+            // 3. نمایش خطوط اضافه شده (سبز)
             setTimeout(() => { 
-                const el = document.getElementById('val-clearance');
-                el.innerText = 'GRANTED'; 
-                el.style.color = '#10b981';
-                document.getElementById('bar-clearance').style.background = '#10b981';
-                document.getElementById('bar-clearance').style.width = '100%'; 
+                const added = stats.lines_added || '0';
+                document.getElementById('val-added').innerText = '+' + added; 
+                document.getElementById('bar-added').style.width = '100%'; 
             }, 1300);
+
+            // 4. نمایش خطوط حذف شده (قرمز)
+            setTimeout(() => { 
+                const removed = stats.lines_removed || '0';
+                document.getElementById('val-removed').innerText = '-' + removed; 
+                document.getElementById('bar-removed').style.width = '100%'; 
+            }, 1700);
 
             // منطق پیشرفت Tier
             let nextTier = 'SILVER'; let progressPct = '65%'; let fillPct = '65%';
@@ -837,7 +840,7 @@
                 document.getElementById('bar-tier').style.background = `linear-gradient(90deg, ${tierColor}, ${nextColor})`;
                 document.getElementById('bar-tier').style.width = fillPct;
                 document.getElementById('val-tier-pct').innerText = fillPct === '100%' ? 'Highest tier unlocked!' : `${progressPct} completed to next tier`;
-            }, 1800);
+            }, 2100);
         }
 
         // --- Tutorial Setup ---
