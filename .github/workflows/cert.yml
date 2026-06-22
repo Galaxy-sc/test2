@@ -16,8 +16,15 @@ jobs:
       contents: write 
     
     steps:
-      - name: Checkout Repository
+      - name: Checkout Main Repository
         uses: actions/checkout@v4
+
+      # دانلود برنچ دیتا در یک پوشه مجزا به نام db_branch
+      - name: Checkout Data Branch
+        uses: actions/checkout@v4
+        with:
+          ref: data 
+          path: db_branch
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -41,17 +48,11 @@ jobs:
           issue_title = os.environ['ISSUE_TITLE']
           gh_token = os.environ['GH_TOKEN']
           
-          print(f"[*] Processing Issue Title: {issue_title}")
-          
-          # بررسی دقیق عنوان ایشو
           if "Cert Request" not in issue_title:
-              print("[!] Workflow Stopped: The issue title does not contain 'Cert Request'")
               sys.exit(0)
               
           name_match = re.search(r'FullName:\s*(.+)', issue_body)
           real_name = name_match.group(1).strip() if name_match else user
-          
-          print(f"[*] Target User: @{user}")
               
           query = f"author:{user} org:OWASP"
           url = f"https://api.github.com/search/commits?q={urllib.parse.quote(query)}"
@@ -67,11 +68,10 @@ jobs:
               with urllib.request.urlopen(req) as response:
                   data = json.loads(response.read().decode())
                   commit_count = data.get('total_count', 0)
-                  print(f"[*] Found {commit_count} commits for @{user} in OWASP")
           except Exception as e:
               print(f"::error::API Error Details: {e}")
               with open(os.environ['GITHUB_ENV'], 'a') as f:
-                  f.write("ERROR_MSG=خطا در ارتباط با سرورهای گیت‌هاب برای شمارش کامیت‌ها.\n")
+                  f.write("ERROR_MSG=خطا در ارتباط با سرورهای گیت‌هاب.\n")
               sys.exit(1)
           
           if commit_count == 0:
@@ -102,8 +102,9 @@ jobs:
               }
           }
           
-          os.makedirs("certs", exist_ok=True)
-          file_path = f"certs/{cert_id}.json"
+          # ذخیره فایل در پوشه برنچ دیتا
+          os.makedirs("db_branch/certs", exist_ok=True)
+          file_path = f"db_branch/certs/{cert_id}.json"
           with open(file_path, "w", encoding="utf-8") as f:
               json.dump(payload, f, ensure_ascii=False, indent=2)
           
@@ -117,14 +118,17 @@ jobs:
               f.write(f"CERT_ID={cert_id}\n")
         shell: python
 
-      - name: Commit and Push JSON File
+      - name: Commit and Push JSON to Data Branch
         if: success() && env.CERT_URL != ''
         run: |
+          # وارد پوشه برنچ دیتا می‌شویم
+          cd db_branch
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add certs/${{ env.CERT_ID }}.json
-          git commit -m "docs(crt): generate/update cert for @${{ github.actor }}" || echo "No changes to commit"
-          git push
+          git commit -m "db(crt): save cert data for @${{ github.actor }} [skip ci]" || echo "No changes to commit"
+          git pull --rebase origin data
+          git push origin data
 
       - name: Comment Success & Close Issue
         if: success() && env.CERT_URL != ''
@@ -132,7 +136,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
-          gh issue comment $ISSUE --body "### 🎉 تبریک! مدرک شما آماده و روی شبکه ذخیره شد.
+          gh issue comment $ISSUE --body "### 🎉 تبریک! مدرک شما صادر شد.
           **نام ثبت شده:** ${{ env.REAL_NAME }}
           **شناسه یکتا:** \`${{ env.CERT_ID }}\`
           **سطح:** ${{ env.TIER }} (${{ env.COUNT }} کامیت تایید شده)
