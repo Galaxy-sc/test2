@@ -41,20 +41,25 @@ jobs:
           issue_title = os.environ['ISSUE_TITLE']
           gh_token = os.environ['GH_TOKEN']
           
+          print(f"[*] Processing Issue Title: {issue_title}")
+          
+          # بررسی دقیق عنوان ایشو
           if "Cert Request" not in issue_title:
+              print("[!] Workflow Stopped: The issue title does not contain 'Cert Request'")
               sys.exit(0)
               
           name_match = re.search(r'FullName:\s*(.+)', issue_body)
           real_name = name_match.group(1).strip() if name_match else user
+          
+          print(f"[*] Target User: @{user}")
               
-          # استفاده از API جستجوی کامیت‌ها در کل سازمان
           query = f"author:{user} org:OWASP"
           url = f"https://api.github.com/search/commits?q={urllib.parse.quote(query)}"
           
           headers = {
               'User-Agent': 'OWASP-CRT-Agent',
               'Authorization': f'Bearer {gh_token}',
-              'Accept': 'application/vnd.github+json' # هدر الزامی برای سرچ کامیت
+              'Accept': 'application/vnd.github+json'
           }
 
           try:
@@ -62,18 +67,18 @@ jobs:
               with urllib.request.urlopen(req) as response:
                   data = json.loads(response.read().decode())
                   commit_count = data.get('total_count', 0)
+                  print(f"[*] Found {commit_count} commits for @{user} in OWASP")
           except Exception as e:
-              print(f"::error::API Error: {e}")
+              print(f"::error::API Error Details: {e}")
               with open(os.environ['GITHUB_ENV'], 'a') as f:
-                  f.write("ERROR_MSG=خطا در ارتباط با سرورهای گیت‌هاب.\n")
+                  f.write("ERROR_MSG=خطا در ارتباط با سرورهای گیت‌هاب برای شمارش کامیت‌ها.\n")
               sys.exit(1)
           
           if commit_count == 0:
               with open(os.environ['GITHUB_ENV'], 'a') as f:
-                  f.write(f"ERROR_MSG=کاربر @{user} هیچ کامیتی در پروژه‌های OWASP ندارد.\n")
+                  f.write(f"ERROR_MSG=کاربر @{user} هیچ کامیتی در پروژه‌های عمومی OWASP ندارد.\n")
               sys.exit(1)
               
-          # منطق سطح‌بندی بر اساس تعداد کامیت
           if commit_count >= 50:
               tier = "Gold"
           elif commit_count >= 10:
@@ -90,8 +95,8 @@ jobs:
               "tier": tier, 
               "stats": {
                   "merged_commits": commit_count,
-                  "pr_count": "--", # از کار افتاد تا لیمیت نخوریم
-                  "issue_count": "--", # از کار افتاد تا لیمیت نخوریم
+                  "pr_count": "--",
+                  "issue_count": "--",
                   "lines_added": "--", 
                   "lines_removed": "--"
               }
