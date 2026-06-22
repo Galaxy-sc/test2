@@ -68,18 +68,13 @@
         }
 
         .taskbar-left { display: flex; align-items: center; gap: 10px; position: relative; }
-        .start-btn {
-            width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #9d4edd, #ff2a5f);
-            display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 15px rgba(157, 78, 221, 0.4);
+        .overview-btn {
+            width: 44px; height: 44px; border-radius: 12px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1);
         }
-        .start-btn svg { width: 22px; height: 22px; fill: white; stroke: white; transition: transform 0.3s; }
-        .start-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(157, 78, 221, 0.6); }
-        .start-btn:active svg { transform: scale(0.9); }
-        
-        .overview-btn { background: rgba(255, 255, 255, 0.05); box-shadow: none; border: 1px solid rgba(255,255,255,0.1); }
-        .overview-btn svg { fill: #9d4edd; stroke: none; }
-        .overview-btn:hover, .overview-btn.active { background: rgba(157, 78, 221, 0.2); border-color: rgba(157, 78, 221, 0.5); box-shadow: 0 0 15px rgba(157, 78, 221, 0.3); }
+        .overview-btn svg { width: 22px; height: 22px; fill: #9d4edd; stroke: none; transition: transform 0.3s; }
+        .overview-btn:hover, .overview-btn.active { background: rgba(157, 78, 221, 0.2); border-color: rgba(157, 78, 221, 0.5); box-shadow: 0 0 15px rgba(157, 78, 221, 0.3); transform: scale(1.05); }
+        .overview-btn:active svg { transform: scale(0.9); }
         .taskbar-divider { width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 5px; }
 
         .dock-container { display: flex; gap: 8px; align-items: center; position: absolute; left: 50%; transform: translateX(-50%); }
@@ -135,7 +130,7 @@
         .desktop-icon:hover .svg-icon { stroke: #ff2a5f; filter: drop-shadow(0 0 12px rgba(255, 42, 95, 0.7)); }
         .desktop-icon span { font-size: 11px; color: #e2e8f0; text-shadow: 0 2px 4px #000; font-family: 'Fira Code', monospace; display: block; line-height: 1.4; }
 
-        /* --- Telemetry Panel --- */
+        /* --- Telemetry Panel (Redesigned) --- */
         .metrics-panel {
             position: absolute; right: 20px; top: 0px; width: 280px;
             background: rgba(13, 15, 22, 0.7); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
@@ -143,14 +138,16 @@
             padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             font-family: 'Fira Code', monospace; color: #94a3b8; z-index: 50; transition: all 0.5s ease;
         }
-        .metrics-header { font-size: 12px; color: #9d4edd; border-bottom: 1px solid rgba(157, 78, 221, 0.2); padding-bottom: 10px; margin-bottom: 15px; letter-spacing: 1px; font-weight: bold; }
+        .metrics-header { font-size: 12px; color: #9d4edd; border-bottom: 1px solid rgba(157, 78, 221, 0.2); padding-bottom: 10px; margin-bottom: 20px; letter-spacing: 1px; font-weight: bold; }
         .status-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); float: right; transition: all 0.5s; }
         .status-badge.active { background: rgba(16, 185, 129, 0.1); color: #10b981; border-color: rgba(16, 185, 129, 0.3); }
-        .metric-row { margin-bottom: 12px; }
-        .metric-label { font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 4px; color: #cbd5e1; }
+        
+        .metric-row { margin-bottom: 18px; }
+        .metric-label { font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 6px; color: #cbd5e1; }
         .metric-bar-bg { width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
         .metric-bar-fill { height: 100%; width: 0%; transition: width 2s cubic-bezier(0.1, 0.5, 0.2, 1); }
-        .tier-progress { margin-top: 20px; padding-top: 15px; border-top: 1px dashed rgba(255,255,255,0.1); }
+        
+        .tier-progress { margin-top: 25px; padding-top: 15px; border-top: 1px dashed rgba(255,255,255,0.1); }
         .tier-label { font-size: 11px; color: #e2e8f0; text-align: center; margin-bottom: 8px; }
         .tier-label span { color: #9d4edd; font-weight: bold; }
 
@@ -273,7 +270,7 @@
 
     <div class="taskbar">
         <div class="taskbar-left">
-            <div class="start-btn overview-btn" id="overview-btn" onclick="toggleOverview(event)" title="Task View (Overview)">
+            <div class="overview-btn" id="overview-btn" onclick="toggleOverview(event)" title="Task View (Overview)">
                 <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
             </div>
             <div class="taskbar-divider"></div>
@@ -321,22 +318,18 @@
                 <span class="status-badge" id="telemetry-status">STANDBY</span>
             </div>
             <div class="metric-row">
-                <div class="metric-label"><span>Commits</span> <span id="val-commits">--</span></div>
+                <div class="metric-label"><span>Verified Commits</span> <span id="val-commits">--</span></div>
                 <div class="metric-bar-bg"><div class="metric-bar-fill" id="bar-commits" style="background:#ff2a5f;"></div></div>
             </div>
             <div class="metric-row">
-                <div class="metric-label"><span>Pull Requests</span> <span id="val-prs">--</span></div>
-                <div class="metric-bar-bg"><div class="metric-bar-fill" id="bar-prs" style="background:#4a7bfe;"></div></div>
+                <div class="metric-label"><span>Identity Status</span> <span id="val-identity" style="transition: color 0.5s;">UNVERIFIED</span></div>
+                <div class="metric-bar-bg"><div class="metric-bar-fill" id="bar-identity" style="background:#4a7bfe;"></div></div>
             </div>
             <div class="metric-row">
-                <div class="metric-label"><span>Issues</span> <span id="val-issues">--</span></div>
-                <div class="metric-bar-bg"><div class="metric-bar-fill" id="bar-issues" style="background:#9d4edd;"></div></div>
+                <div class="metric-label"><span>System Clearance</span> <span id="val-clearance" style="transition: color 0.5s;">LOCKED</span></div>
+                <div class="metric-bar-bg"><div class="metric-bar-fill" id="bar-clearance" style="background:#9d4edd;"></div></div>
             </div>
-            <div class="metric-row" style="margin-top: 15px; display: flex; flex-direction: column; gap: 5px;">
-                <div class="metric-label" style="color: #ff2a5f;"><span>Lines Added</span> <span id="val-added">--</span></div>
-                <div class="metric-label" style="color: #4a7bfe;"><span>Lines Removed</span> <span id="val-removed">--</span></div>
-                <div class="metric-label" style="color: #9d4edd;"><span>Status</span> <span id="val-projects">--</span></div>
-            </div>
+            
             <div class="tier-progress">
                 <div class="tier-label" id="tier-path">Next Tier Target: <span>AWAITING IDENTITY</span></div>
                 <div class="metric-bar-bg" style="height: 10px; border-radius: 5px;">
@@ -487,27 +480,6 @@
             const options = { month: 'short', day: 'numeric', year: 'numeric' };
             document.getElementById('date').innerText = d.toLocaleDateString('en-US', options).toUpperCase();
         }, 1000);
-
-        // --- Start Menu ---
-        function toggleStartMenu(e) {
-            if(e) e.stopPropagation();
-            const menu = document.getElementById('start-menu');
-            const btn = document.getElementById('start-btn');
-            menu.classList.toggle('show');
-            btn.classList.toggle('active');
-            
-            const wm = document.getElementById('window-manager');
-            if(wm.classList.contains('overview-mode')) toggleOverview();
-        }
-
-        document.addEventListener('click', function(event) {
-            const menu = document.getElementById('start-menu');
-            const btn = document.getElementById('start-btn');
-            if (menu && btn && !menu.contains(event.target) && !btn.contains(event.target)) {
-                menu.classList.remove('show');
-                btn.classList.remove('active');
-            }
-        });
 
         // --- Window Manager (GNOME Task View) ---
         function toggleOverview(e) {
@@ -804,24 +776,38 @@
             setTimeout(type, 500);
         }
 
-        // --- Telemetry Activation ---
+        // --- Telemetry Activation (Redesigned for Commits & System Status) ---
         function activateTelemetry(tier, stats) {
             const badge = document.getElementById('telemetry-status');
             badge.innerText = 'CONNECTED'; badge.classList.add('active');
 
-            // بارگذاری آمار واقعی از فایل JSON
-            setTimeout(() => { document.getElementById('val-commits').innerText = stats.merged_commits || '--'; document.getElementById('bar-commits').style.width = '85%'; }, 500);
-            setTimeout(() => { document.getElementById('val-prs').innerText = stats.pr_count || '0'; document.getElementById('bar-prs').style.width = '60%'; }, 800);
-            setTimeout(() => { document.getElementById('val-issues').innerText = stats.issue_count || '0'; document.getElementById('bar-issues').style.width = '75%'; }, 1100);
+            // 1. نمایش تعداد کامیت‌ها
             setTimeout(() => { 
-                document.getElementById('val-added').innerText = '+' + (stats.lines_added || '0'); 
-                document.getElementById('val-removed').innerText = '-' + (stats.lines_removed || '0'); 
-                document.getElementById('val-projects').innerText = 'Verified'; 
-            }, 1500);
+                document.getElementById('val-commits').innerText = stats.merged_commits || '0'; 
+                document.getElementById('bar-commits').style.width = '100%'; 
+            }, 500);
 
+            // 2. تغییر وضعیت احراز هویت با رنگ سبز تایید
+            setTimeout(() => { 
+                const el = document.getElementById('val-identity');
+                el.innerText = 'AUTHENTICATED'; 
+                el.style.color = '#10b981';
+                document.getElementById('bar-identity').style.background = '#10b981';
+                document.getElementById('bar-identity').style.width = '100%'; 
+            }, 900);
+
+            // 3. تغییر وضعیت مجوز سیستمی
+            setTimeout(() => { 
+                const el = document.getElementById('val-clearance');
+                el.innerText = 'GRANTED'; 
+                el.style.color = '#10b981';
+                document.getElementById('bar-clearance').style.background = '#10b981';
+                document.getElementById('bar-clearance').style.width = '100%'; 
+            }, 1300);
+
+            // منطق پیشرفت Tier
             let nextTier = 'SILVER'; let progressPct = '65%'; let fillPct = '65%';
             let currentTier = (tier || "").toUpperCase();
-            
             let tierColor = '#ff2a5f'; 
             let nextColor = '#4a7bfe';
 
@@ -843,7 +829,7 @@
                 document.getElementById('bar-tier').style.background = `linear-gradient(90deg, ${tierColor}, ${nextColor})`;
                 document.getElementById('bar-tier').style.width = fillPct;
                 document.getElementById('val-tier-pct').innerText = fillPct === '100%' ? 'Highest tier unlocked!' : `${progressPct} completed to next tier`;
-            }, 2000);
+            }, 1800);
         }
 
         // --- Tutorial Setup ---
@@ -870,7 +856,6 @@
         // --- Certificate JSON Verification ---
         window.onload = async function() {
             const params = new URLSearchParams(window.location.search);
-            // پارامتر جدید id است
             const certId = params.get('id');
 
             if (certId) {
@@ -880,7 +865,6 @@
                 openWindow('cert-win');
 
                 try {
-                    // دریافت مستقیم فایل JSON از ریپازیتوری Pages
                     const response = await fetch(`certs/${certId}.json`);
                     
                     if (!response.ok) {
@@ -905,7 +889,6 @@
                         colorDark : "#111827", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
                     });
 
-                    // پاس دادن آمار خوانده شده به پنل تله‌متری
                     activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
 
                 } catch (e) {
