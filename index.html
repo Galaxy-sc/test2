@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OWASP OS | CRT Workspace</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Inter:wght@400;600&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body { background-color: #050608; color: #e2e8f0; height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; position: relative; }
+
+        /* --- Premium Animated Background --- */
+        .bg-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0;
+            background: #050608; overflow: hidden;
+        }
+        .orb-1 {
+            position: absolute; top: -30%; left: -10%; width: 60vw; height: 60vw;
+            background: radial-gradient(circle, rgba(157, 78, 221, 0.12) 0%, transparent 60%);
+            border-radius: 50%; animation: floatOrb 12s infinite alternate ease-in-out;
+        }
+        .orb-2 {
+            position: absolute; bottom: -30%; right: -10%; width: 70vw; height: 70vw;
+            background: radial-gradient(circle, rgba(74, 123, 254, 0.08) 0%, transparent 60%);
+            border-radius: 50%; animation: floatOrb 15s infinite alternate-reverse ease-in-out;
+        }
+        .bg-noise {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;
+            background-image: url('data:image/svg+xml;utf8,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noise"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noise)" opacity="0.03"/%3E%3C/svg%3E');
+            pointer-events: none;
+        }
+
+        @keyframes floatOrb {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(40px, 60px) scale(1.1); }
+        }
+
+        /* =========================================
+           CUSTOM WINDOW SCROLLBARS
+           ========================================= */
+        .os-window * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(173, 216, 230, 0.5) rgba(31, 41, 55, 0.5);
+        }
+        .os-window ::-webkit-scrollbar { width: 8px; height: 8px; }
+        .os-window ::-webkit-scrollbar-track { background: rgba(31, 41, 55, 0.3); border-radius: 4px; }
+        .os-window ::-webkit-scrollbar-thumb {
+            background: rgba(173, 216, 230, 0.5); border-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.1); transition: background 0.3s, box-shadow 0.3s;
+        }
+        .os-window ::-webkit-scrollbar-thumb:hover { background: rgba(173, 216, 230, 0.8); box-shadow: 0 0 8px rgba(173, 216, 230, 0.5); }
+        .os-window ::-webkit-scrollbar-corner { background: transparent; }
+
+        /* =========================================
+           SINGLE UNIFIED TASKBAR
+           ========================================= */
+        .taskbar {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            width: 96%; max-width: 1200px; height: 60px;
+            background: rgba(15, 17, 26, 0.7); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.1);
+            display: flex; justify-content: space-between; align-items: center; padding: 0 15px; z-index: 9999;
+        }
+
+        .taskbar-left { display: flex; align-items: center; gap: 10px; position: relative; }
+        .start-btn {
+            width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, #9d4edd, #ff2a5f);
+            display: flex; justify-content: center; align-items: center; cursor: pointer; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 15px rgba(157, 78, 221, 0.4);
+        }
+        .start-btn svg { width: 22px; height: 22px; fill: white; stroke: white; transition: transform 0.3s; }
+        .start-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px rgba(157, 78, 221, 0.6); }
+        .start-btn:active svg { transform: scale(0.9); }
+        
+        .overview-btn { background: rgba(255, 255, 255, 0.05); box-shadow: none; border: 1px solid rgba(255,255,255,0.1); }
+        .overview-btn svg { fill: #9d4edd; stroke: none; }
+        .overview-btn:hover, .overview-btn.active { background: rgba(157, 78, 221, 0.2); border-color: rgba(157, 78, 221, 0.5); box-shadow: 0 0 15px rgba(157, 78, 221, 0.3); }
+        .taskbar-divider { width: 1px; height: 24px; background: rgba(255,255,255,0.1); margin: 0 5px; }
+
+        .dock-container { display: flex; gap: 8px; align-items: center; position: absolute; left: 50%; transform: translateX(-50%); }
+        .dock-item {
+            width: 44px; height: 44px; border-radius: 12px; display: flex; justify-content: center; align-items: center;
+            background: transparent; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; cursor: pointer;
+        }
+        .dock-item:hover { background: rgba(255,255,255,0.08); transform: translateY(4px); }
+        .dock-item svg { width: 22px; height: 22px; stroke: #94a3b8; stroke-width: 1.5; fill: none; transition: 0.3s; }
+        .dock-item:hover svg { stroke: #9d4edd; }
+        .dock-item::after {
+            content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%);
+            width: 4px; height: 4px; border-radius: 2px; background: #64748b; opacity: 0; transition: all 0.3s;
+        }
+        .dock-item.running::after { opacity: 1; }
+        .dock-item.focused::after { background: #9d4edd; width: 14px; box-shadow: 0 0 8px rgba(157, 78, 221, 0.6); }
+        .dock-item.focused svg { stroke: #9d4edd; filter: drop-shadow(0 0 8px rgba(157, 78, 221, 0.4)); }
+
+        .dock-tooltip {
+            position: absolute; top: 60px; left: 50%; transform: translateX(-50%) translateY(-10px);
+            background: rgba(0,0,0,0.8); color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px;
+            font-family: 'Inter', sans-serif; pointer-events: none; opacity: 0; transition: 0.2s; white-space: nowrap;
+            border: 1px solid rgba(255,255,255,0.1); z-index: 10000;
+        }
+        .dock-item:hover .dock-tooltip { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        .taskbar-right { display: flex; align-items: center; gap: 12px; }
+        .sys-tray { 
+            display: flex; gap: 12px; padding: 8px 14px; background: rgba(0,0,0,0.25); 
+            border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); cursor: default; align-items: center;
+        }
+        .sys-tray svg, .sys-tray .lang-ind { stroke: #cbd5e1; fill: none; transition: 0.2s; cursor: pointer; color: #cbd5e1; }
+        .sys-tray svg { width: 16px; height: 16px; stroke-width: 2; }
+        .sys-tray svg:hover, .sys-tray .lang-ind:hover { stroke: #9d4edd; color: #9d4edd; }
+        .lang-ind { font-size: 11px; font-weight: bold; font-family: 'Inter', sans-serif; display: block; line-height: 1;}
+        
+        .clock-widget {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 4px 14px; background: rgba(0,0,0,0.25); border-radius: 12px; cursor: default;
+            border: 1px solid rgba(255,255,255,0.05); transition: 0.2s;
+        }
+        .clock-widget:hover { background: rgba(255,255,255,0.05); }
+        .clock-time { font-size: 13px; font-weight: bold; color: #9d4edd; font-family: 'Inter', sans-serif; letter-spacing: 0.5px; }
+        .clock-date { font-size: 9px; color: #94a3b8; font-family: 'Inter', sans-serif; text-transform: uppercase; font-weight: 600;}
+
+        /* --- Desktop Area --- */
+        #desktop { position: absolute; top: 85px; left: 0; width: 100%; height: calc(100% - 85px); z-index: 10; }
+        .icon-grid { display: flex; flex-direction: column; gap: 30px; padding: 30px; }
+        .icon-wrapper { position: relative; width: 90px; display: inline-block; }
+        .desktop-icon { width: 100%; text-align: center; cursor: pointer; padding: 12px 5px; border-radius: 8px; transition: all 0.2s; border: 1px solid transparent; position: relative; z-index: 2; }
+        .desktop-icon:hover { background: rgba(157, 78, 221, 0.15); border-color: rgba(157, 78, 221, 0.3); }
+        .svg-icon { width: 42px; height: 42px; margin: 0 auto 10px; stroke: #9d4edd; stroke-width: 1.2; fill: none; filter: drop-shadow(0 0 8px rgba(157, 78, 221, 0.5)); transition: stroke 0.3s, filter 0.3s; }
+        .desktop-icon:hover .svg-icon { stroke: #ff2a5f; filter: drop-shadow(0 0 12px rgba(255, 42, 95, 0.7)); }
+        .desktop-icon span { font-size: 11px; color: #e2e8f0; text-shadow: 0 2px 4px #000; font-family: 'Fira Code', monospace; display: block; line-height: 1.4; }
+
+        /* --- Telemetry Panel --- */
+        .metrics-panel {
+            position: absolute; right: 20px; top: 0px; width: 280px;
+            background: rgba(13, 15, 22, 0.7); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(157, 78, 221, 0.2); border-radius: 10px;
+            padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            font-family: 'Fira Code', monospace; color: #94a3b8; z-index: 50; transition: all 0.5s ease;
+        }
+        .metrics-header { font-size: 12px; color: #9d4edd; border-bottom: 1px solid rgba(157, 78, 221, 0.2); padding-bottom: 10px; margin-bottom: 15px; letter-spacing: 1px; font-weight: bold; }
+        .status-badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 9px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); float: right; transition: all 0.5s; }
+        .status-badge.active { background: rgba(16, 185, 129, 0.1); color: #10b981; border-color: rgba(16, 185, 129, 0.3); }
+        .metric-row { margin-bottom: 12px; }
+        .metric-label { font-size: 10px; display: flex; justify-content: space-between; margin-bottom: 4px; color: #cbd5e1; }
+        .metric-bar-bg { width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+        .metric-bar-fill { height: 100%; width: 0%; transition: width 2s cubic-bezier(0.1, 0.5, 0.2, 1); }
+        .tier-progress { margin-top: 20px; padding-top: 15px; border-top: 1px dashed rgba(255,255,255,0.1); }
+        .tier-label { font-size: 11px; color: #e2e8f0; text-align: center; margin-bottom: 8px; }
+        .tier-label span { color: #9d4edd; font-weight: bold; }
+
+        /* --- Tooltips & Rings --- */
+        .tutorial-tooltip {
+            position: absolute; width: 260px; background: rgba(15, 17, 26, 0.95); backdrop-filter: blur(10px);
+            padding: 12px 16px; border-radius: 8px; z-index: 10000; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            opacity: 0; visibility: hidden; transition: opacity 0.3s ease;
+        }
+        .tutorial-tooltip.left-arrow { left: 105px; top: 50%; transform: translateY(-50%); }
+        .tutorial-tooltip.left-arrow::before { content: ''; position: absolute; left: -6px; top: 50%; transform: translateY(-50%) rotate(45deg); width: 12px; height: 12px; background: rgba(15, 17, 26, 0.95); border-left: inherit; border-bottom: inherit; }
+        .tutorial-tooltip.bottom-arrow::before { content: ''; position: absolute; left: 45px; bottom: -6.5px; transform: rotate(45deg); width: 12px; height: 12px; background: rgba(15, 17, 26, 0.95); border-bottom: inherit; border-right: inherit; }
+        .tooltip-step-1 { border: 1px solid #ff2a5f; box-shadow: 0 0 20px rgba(255, 42, 95, 0.15); }
+        .tooltip-step-1::before { border-left: 1px solid #ff2a5f; border-bottom: 1px solid #ff2a5f; }
+        .tooltip-step-2 { border: 1px solid #9d4edd; box-shadow: 0 0 20px rgba(157, 78, 221, 0.15); }
+        .tooltip-step-2::before { border-left: 1px solid #9d4edd; border-bottom: 1px solid #9d4edd; }
+        .tooltip-step-3 { border: 1px solid #4a7bfe; box-shadow: 0 0 20px rgba(74, 123, 254, 0.15); }
+        .tooltip-title { font-family: 'Fira Code', monospace; font-size: 11px; font-weight: bold; margin-bottom: 5px; }
+        .tooltip-step-1 .tooltip-title { color: #ff2a5f; } .tooltip-step-2 .tooltip-title { color: #9d4edd; } .tooltip-step-3 .tooltip-title { color: #4a7bfe; }
+        .tooltip-text { font-size: 11px; line-height: 1.5; color: #cbd5e1; }
+        
+        .tutorial-ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 100%; height: 100%; padding: 15px; border-radius: 12px; opacity: 0; pointer-events: none; z-index: 1; }
+        .ring-1 { border: 2px solid #ff2a5f; } .ring-2 { border: 2px solid #9d4edd; }
+        .tutorial-ring.active { animation: pingRing 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; opacity: 1; }
+        @keyframes pulseGreen { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        .pulse-green { animation: pulseGreen 1.5s infinite; }
+        @keyframes pingRing { 75%, 100% { transform: translate(-50%, -50%) scale(1.3); opacity: 0; } }
+
+        /* =========================================
+           WINDOW MANAGER & OVERVIEW MODE
+           ========================================= */
+        #window-manager {
+            position: absolute; inset: 0; pointer-events: none; z-index: 100;
+            transition: background 0.4s ease, backdrop-filter 0.4s ease;
+        }
+        
+        #window-manager.overview-mode {
+            background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+            pointer-events: auto; z-index: 9990; 
+            display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 30px; padding: 50px; padding-top: 100px;
+        }
+
+        /* --- Windows --- */
+        .os-window {
+            position: absolute; background: rgba(13, 15, 22, 0.85); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(157, 78, 221, 0.3); border-radius: 10px; box-shadow: 0 25px 50px rgba(0,0,0,0.6); 
+            display: none; flex-direction: column; pointer-events: auto;
+            transition: box-shadow 0.3s, border-color 0.3s;
+        }
+        .os-window.active { border-color: #9d4edd; box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 30px rgba(157, 78, 221, 0.15); }
+        
+        .os-window.maximized {
+            top: 85px !important; left: 10px !important; width: calc(100% - 20px) !important; height: calc(100% - 95px) !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #window-manager.overview-mode .os-window[style*="display: flex"] {
+            position: relative !important; top: auto !important; left: auto !important;
+            transform: scale(0.5) !important; margin: -10% !important; cursor: pointer;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+        #window-manager.overview-mode .os-window[style*="display: flex"]::after {
+            content: ''; position: absolute; inset: 0; z-index: 10000; border-radius: 10px; transition: 0.3s;
+        }
+        #window-manager.overview-mode .os-window[style*="display: flex"]:hover {
+            transform: scale(0.55) !important; box-shadow: 0 15px 50px rgba(157, 78, 221, 0.6); border-color: #9d4edd;
+        }
+        #window-manager.overview-mode .os-window[style*="display: flex"]:hover::after { background: rgba(157, 78, 221, 0.1); }
+
+        .title-bar {
+            background: rgba(0, 0, 0, 0.5); height: 38px; display: flex; justify-content: space-between; align-items: center; 
+            padding: 0 15px; cursor: grab; border-bottom: 1px solid rgba(157, 78, 221, 0.15); border-radius: 9px 9px 0 0; 
+        }
+        .os-window.maximized .title-bar { border-radius: 0; }
+        .title-bar:active { cursor: grabbing; }
+        .window-controls { display: flex; gap: 8px; }
+        .control-btn { width: 12px; height: 12px; border-radius: 50%; cursor: pointer; transition: 0.2s; }
+        .close-btn { background: #ef4444; } .min-btn { background: #eab308; } .max-btn { background: #10b981; }
+        .window-title { font-size: 12px; color: #94a3b8; font-family: 'Fira Code', monospace; pointer-events: none; }
+
+        /* --- Content Areas --- */
+        .text-editor-content { padding: 30px; font-family: 'Fira Code', monospace; font-size: 14px; line-height: 1.8; color: #94a3b8; height: 100%; overflow-y: auto; border-radius: 0 0 9px 9px;}
+        .highlight { color: #9d4edd; font-weight: bold; text-shadow: 0 0 10px rgba(157, 78, 221, 0.3); }
+        .owasp-text { color: #4a7bfe; font-weight: bold; }
+        .cursor { display: inline-block; width: 8px; height: 16px; background: #9d4edd; animation: blink 1s infinite; vertical-align: middle; margin-left: 4px; }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .guide-list { list-style: none; padding: 0; margin-top: 15px; color: #cbd5e1; font-size: 13px; line-height: 2; }
+        .guide-list li::before { content: '>'; color: #9d4edd; margin-right: 8px; font-weight: bold; }
+
+        .terminal-bg {
+            background: rgba(5, 6, 8, 0.35); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+            box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.6); padding: 20px; font-family: 'Fira Code', monospace;
+            font-size: 13px; color: #e2e8f0; height: 100%; overflow-y: auto; border-radius: 0 0 9px 9px;
+            cursor: text; display: flex; flex-direction: column; line-height: 1.6;
+        }
+        .term-out { color: #94a3b8; } .term-user { color: #ff2a5f; font-weight: bold; } .term-host { color: #4a7bfe; font-weight: bold; }
+        .term-prompt-line { display: flex; align-items: center; margin-top: 5px; }
+        .term-input-field { background: transparent; border: none; outline: none; color: #fff; font-family: 'Fira Code', monospace; font-size: 13px; flex-grow: 1; margin-left: 8px; }
+        .term-success { color: #10b981; }
+
+        .cert-viewer-content {
+            background: #ffffff; color: #111827; padding: 40px; text-align: center; border-radius: 0 0 9px 9px; 
+            position: relative; overflow: hidden; height: calc(100% - 38px); display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .cert-watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; font-weight: 900; color: #f3f4f6; opacity: 0.6; pointer-events: none; z-index: 0; }
+        .cert-layer { position: relative; z-index: 10; width: 100%; }
+        #qrcode-container canvas, #qrcode-container img { width: 100px !important; height: 100px !important; }
+
+    </style>
+</head>
+<body>
+
+    <div class="bg-layer">
+        <div class="orb-1"></div>
+        <div class="orb-2"></div>
+        <div class="bg-noise"></div>
+    </div>
+
+    <div class="taskbar">
+        <div class="taskbar-left">
+            <div class="start-btn overview-btn" id="overview-btn" onclick="toggleOverview(event)" title="Task View (Overview)">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+            </div>
+            <div class="taskbar-divider"></div>
+        </div>
+
+        <div class="dock-container">
+            <div class="dock-item" id="dock-guide" onclick="toggleWindow('guide-win')">
+                <div class="dock-tooltip">System Guide</div>
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            </div>
+            <div class="dock-item" id="dock-letter" onclick="toggleWindow('letter-win')">
+                <div class="dock-tooltip">Briefing Letter</div>
+                <svg viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            </div>
+            <div class="dock-item" id="dock-tool" onclick="toggleWindow('tool-win'); initTerminalFlow();">
+                <div class="dock-tooltip">Terminal Engine</div>
+                <svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+            </div>
+            <div class="dock-item" id="dock-cert" onclick="toggleWindow('cert-win')" style="display: none;">
+                <div class="dock-tooltip">Identity Viewer</div>
+                <svg viewBox="0 0 24 24"><path d="M12 15l-2 5l9-5l-2-5l2-5l-9 5l-2-5l-2 5l9 5z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            </div>
+        </div>
+
+        <div class="taskbar-right">
+            <div class="sys-tray">
+                <span class="lang-ind" title="Keyboard Layout: English">EN</span>
+                <svg viewBox="0 0 24 24" title="Network: Wired Connected"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                <svg viewBox="0 0 24 24" title="Volume: 100%"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                <div class="power-btn" onclick="alert('Session closed.'); window.location.reload();" title="Log Out">
+                    <svg viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                </div>
+            </div>
+            <div class="clock-widget">
+                <span class="clock-time" id="clock">00:00</span>
+                <span class="clock-date" id="date">JAN 01, 2026</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="desktop">
+        <div class="metrics-panel" id="metrics-panel">
+            <div class="metrics-header">
+                CONTRIBUTOR TELEMETRY
+                <span class="status-badge" id="telemetry-status">STANDBY</span>
+            </div>
+            <div class="metric-row">
+                <div class="metric-label"><span>Commits</span> <span id="val-commits">--</span></div>
+                <div class="metric-bar-bg"><div class="metric-bar-fill" id="bar-commits" style="background:#ff2a5f;"></div></div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-label"><span>Pull Requests</span> <span id="val-prs">--</span></div>
+                <div class="metric-bar-bg"><div class="metric-bar-fill" id="bar-prs" style="background:#4a7bfe;"></div></div>
+            </div>
+            <div class="metric-row">
+                <div class="metric-label"><span>Issues</span> <span id="val-issues">--</span></div>
+                <div class="metric-bar-bg"><div class="metric-bar-fill" id="bar-issues" style="background:#9d4edd;"></div></div>
+            </div>
+            <div class="metric-row" style="margin-top: 15px; display: flex; flex-direction: column; gap: 5px;">
+                <div class="metric-label" style="color: #ff2a5f;"><span>Lines Added</span> <span id="val-added">--</span></div>
+                <div class="metric-label" style="color: #4a7bfe;"><span>Lines Removed</span> <span id="val-removed">--</span></div>
+                <div class="metric-label" style="color: #9d4edd;"><span>Status</span> <span id="val-projects">--</span></div>
+            </div>
+            <div class="tier-progress">
+                <div class="tier-label" id="tier-path">Next Tier Target: <span>AWAITING IDENTITY</span></div>
+                <div class="metric-bar-bg" style="height: 10px; border-radius: 5px;">
+                    <div class="metric-bar-fill" id="bar-tier" style="background: linear-gradient(90deg, #ff2a5f, #4a7bfe);"></div>
+                </div>
+                <div class="metric-label" style="justify-content: center; margin-top: 8px; font-size: 9px;" id="val-tier-pct">System scanning for parameters...</div>
+            </div>
+        </div>
+
+        <div class="icon-grid">
+            <div class="icon-wrapper">
+                <div class="desktop-icon" ondblclick="openWindow('guide-win')">
+                    <svg class="svg-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <span>System_Guide<br>.txt</span>
+                </div>
+            </div>
+            <div class="icon-wrapper">
+                <div class="tutorial-ring ring-1" id="ring-letter"></div>
+                <div class="tutorial-tooltip tooltip-step-1 left-arrow" id="tooltip-1">
+                    <div class="tooltip-title">STEP 1: INITIALIZE</div>
+                    <div class="tooltip-text">Double-click the letter icon to read your appreciation message.</div>
+                </div>
+                <div class="desktop-icon" ondblclick="openWindow('letter-win'); nextTutorialStep();">
+                    <svg class="svg-icon" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                    <span>Letter_of_<br>Appreciation</span>
+                </div>
+            </div>
+            <div class="icon-wrapper">
+                <div class="tutorial-ring ring-2" id="ring-tool"></div>
+                <div class="tutorial-tooltip tooltip-step-2 left-arrow" id="tooltip-2">
+                    <div class="tooltip-title">STEP 2: PROVISION</div>
+                    <div class="tooltip-text">Execution authorized. Double-click the provisioning terminal.</div>
+                </div>
+                <div class="desktop-icon" ondblclick="openWindow('tool-win'); initTerminalFlow();">
+                    <svg class="svg-icon" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                    <span>CRT_Gen.sh</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="window-manager">
+        <div class="os-window" id="guide-win" style="top: 15%; left: 30%; width: 550px; height: 400px;">
+            <div class="title-bar" onmousedown="startDrag(event, 'guide-win')">
+                <div class="window-controls">
+                    <div class="control-btn close-btn" onclick="closeWindow('guide-win')"></div>
+                    <div class="control-btn min-btn" onclick="toggleWindow('guide-win')"></div>
+                    <div class="control-btn max-btn" onclick="toggleMaximize('guide-win')"></div>
+                </div>
+                <div class="window-title">cat ~/docs/System_Guide.txt</div>
+                <div style="width: 40px;"></div>
+            </div>
+            <div class="text-editor-content">
+                <h3 style="color: #10b981; font-size: 18px; margin-bottom: 10px;">> WELCOME TO OWASP OS Workspace</h3>
+                <p>This secure environment is designed for verified contributors to provision and view their digital recognition credentials.</p>
+                <h4 style="color: #9d4edd; margin-top: 25px; margin-bottom: 5px; font-size: 14px;">[ SYSTEM WORKFLOW ]</h4>
+                <ul class="guide-list">
+                    <li>Read your initial briefing in <b>Letter_of_Appreciation</b>.</li>
+                    <li>Execute <b>CRT_Gen.sh</b> to initialize your identity request via terminal.</li>
+                    <li>Provide your First and Last name into the terminal prompt.</li>
+                    <li>The system will redirect you to GitHub to open an official issue.</li>
+                    <li>Once approved by the team, you will be provided a secure link.</li>
+                </ul>
+                <br>
+                <p style="color: #64748b; font-size: 12px;">> Status: System ready. Awaiting user input...</p>
+            </div>
+        </div>
+
+        <div class="os-window" id="letter-win" style="top: 25%; left: 20%; width: 550px; height: 350px;">
+            <div class="title-bar" onmousedown="startDrag(event, 'letter-win')">
+                <div class="window-controls">
+                    <div class="control-btn close-btn" onclick="closeWindow('letter-win')"></div>
+                    <div class="control-btn min-btn" onclick="toggleWindow('letter-win')"></div>
+                    <div class="control-btn max-btn"></div>
+                </div>
+                <div class="window-title">vi ~/desktop/Letter_of_Appreciation.txt</div>
+                <div style="width: 40px;"></div>
+            </div>
+            <div class="text-editor-content">
+                <div id="typewriter-text"></div>
+                <span class="cursor" id="tw-cursor" style="display: none;"></span>
+            </div>
+        </div>
+
+        <div class="os-window" id="tool-win" style="top: 20%; left: 35%; width: 550px; height: 350px;">
+            <div class="title-bar" onmousedown="startDrag(event, 'tool-win')">
+                <div class="window-controls">
+                    <div class="control-btn close-btn" onclick="closeWindow('tool-win')"></div>
+                    <div class="control-btn min-btn" onclick="toggleWindow('tool-win')"></div>
+                    <div class="control-btn max-btn"></div>
+                </div>
+                <div class="window-title">root@owasp-os: ~</div>
+                <div style="width: 40px;"></div>
+            </div>
+            <div class="terminal-bg" onclick="document.getElementById('term-input').focus()">
+                <div id="term-output"></div>
+                <div class="term-prompt-line" id="term-input-wrapper" style="display: none;">
+                    <span id="term-prompt" style="color: #9d4edd;"></span>
+                    <input type="text" id="term-input" class="term-input-field" autocomplete="off" onkeydown="handleTerminalInput(event)">
+                </div>
+            </div>
+        </div>
+
+        <div class="os-window" id="cert-win" style="top: 10%; left: 20%; width: 800px;">
+            <div class="tutorial-tooltip tooltip-step-3 bottom-arrow" id="tooltip-max" style="top: -70px; left: 10px;">
+                <div class="tooltip-title">HINT: FULLSCREEN</div>
+                <div class="tooltip-text">Click the green button to maximize the certificate for a better view.</div>
+            </div>
+            <div class="title-bar" onmousedown="startDrag(event, 'cert-win')">
+                <div class="window-controls">
+                    <div class="control-btn close-btn" onclick="closeWindow('cert-win')"></div>
+                    <div class="control-btn min-btn" onclick="toggleWindow('cert-win')"></div>
+                    <div class="control-btn max-btn" id="max-btn-cert" onclick="toggleMaximize('cert-win')"></div>
+                </div>
+                <div class="window-title">OWASP_Certificate_Viewer.exe</div>
+                <div style="width: 40px;"></div>
+            </div>
+            <div class="cert-viewer-content">
+                <div class="cert-watermark">OWASP</div>
+                <div class="cert-layer">
+                    <h1 style="font-size: 32px; font-weight: 900; color: #1f2937; margin-bottom: 5px;">Certificate of Recognition</h1>
+                    <p style="color: #4b5563; font-size: 14px; margin-bottom: 20px;">This digital credential validates the contributions of</p>
+                    <h2 id="real-name" style="font-size: 42px; font-family: serif; color: #1d4ed8; margin: 10px 0;">Name</h2>
+                    <p id="user-name" style="font-size: 16px; color: #6b7280; font-family: monospace; border-bottom: 2px solid #e5e7eb; display: inline-block; padding-bottom: 10px; margin-bottom: 20px;">@username</p>
+                    <p style="font-size: 15px; color: #374151; margin-bottom: 25px; line-height: 1.6;">
+                        Has been officially recognized as a vital contributor to the <br>
+                        <strong>Open Web Application Security Project (OWASP)</strong>.
+                    </p>
+                    <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 15px; border-radius: 8px; margin-bottom: 25px; display: inline-block; min-width: 200px;">
+                        <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Achievement Tier</p>
+                        <p id="tier-text" style="font-size: 28px; font-weight: bold; text-transform: uppercase; margin: 0;"></p>
+                    </div>
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                        <div id="qrcode-container" style="padding: 8px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: inline-block;"></div>
+                        <p style="font-size: 10px; color: #9ca3af; font-family: monospace; margin-top: 8px;">Scan to Verify Authentic Credential</p>
+                    </div>
+                    <div id="error-display" style="display: none; background: #fef2f2; border: 1px solid #f87171; color: #dc2626; padding: 15px; border-radius: 8px; font-weight: bold; margin-top: 20px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Clock & Date ---
+        setInterval(() => {
+            const d = new Date();
+            document.getElementById('clock').innerText = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+            const options = { month: 'short', day: 'numeric', year: 'numeric' };
+            document.getElementById('date').innerText = d.toLocaleDateString('en-US', options).toUpperCase();
+        }, 1000);
+
+        // --- Start Menu ---
+        function toggleStartMenu(e) {
+            if(e) e.stopPropagation();
+            const menu = document.getElementById('start-menu');
+            const btn = document.getElementById('start-btn');
+            menu.classList.toggle('show');
+            btn.classList.toggle('active');
+            
+            const wm = document.getElementById('window-manager');
+            if(wm.classList.contains('overview-mode')) toggleOverview();
+        }
+
+        document.addEventListener('click', function(event) {
+            const menu = document.getElementById('start-menu');
+            const btn = document.getElementById('start-btn');
+            if (menu && btn && !menu.contains(event.target) && !btn.contains(event.target)) {
+                menu.classList.remove('show');
+                btn.classList.remove('active');
+            }
+        });
+
+        // --- Window Manager (GNOME Task View) ---
+        function toggleOverview(e) {
+            if(e) e.stopPropagation();
+            const wm = document.getElementById('window-manager');
+            const btn = document.getElementById('overview-btn');
+            
+            wm.classList.toggle('overview-mode');
+            btn.classList.toggle('active');
+        }
+
+        document.getElementById('window-manager').addEventListener('click', function(e) {
+            if (this.classList.contains('overview-mode') && e.target === this) {
+                this.classList.remove('overview-mode');
+                document.getElementById('overview-btn').classList.remove('active');
+            }
+        });
+
+        document.querySelectorAll('.os-window').forEach(win => {
+            win.addEventListener('click', function(e) {
+                const wm = document.getElementById('window-manager');
+                if (wm.classList.contains('overview-mode')) {
+                    e.stopPropagation();
+                    wm.classList.remove('overview-mode');
+                    document.getElementById('overview-btn').classList.remove('active');
+                    
+                    this.style.zIndex = ++highestZ;
+                    document.querySelectorAll('.os-window').forEach(w => w.classList.remove('active'));
+                    this.classList.add('active');
+                    updateDockState();
+                }
+            });
+        });
+
+        // --- Dock Min/Max Logic ---
+        let highestZ = 100;
+        
+        function updateDockState() {
+            const windows = ['guide-win', 'letter-win', 'tool-win', 'cert-win'];
+            windows.forEach(winId => {
+                const winEl = document.getElementById(winId);
+                const dockId = 'dock-' + winId.split('-')[0];
+                const dockEl = document.getElementById(dockId);
+                
+                if (dockEl && winEl) {
+                    if (winEl.style.display !== 'none' && winEl.style.display !== '') {
+                        dockEl.classList.add('running');
+                        if (winEl.classList.contains('active')) {
+                            dockEl.classList.add('focused');
+                        } else {
+                            dockEl.classList.remove('focused');
+                        }
+                    } else {
+                        dockEl.classList.remove('running');
+                        dockEl.classList.remove('focused');
+                    }
+                }
+            });
+        }
+
+        function openWindow(id) {
+            const win = document.getElementById(id);
+            const wm = document.getElementById('window-manager');
+            
+            if (wm.classList.contains('overview-mode')) {
+                wm.classList.remove('overview-mode');
+                document.getElementById('overview-btn').classList.remove('active');
+            }
+
+            win.style.display = 'flex';
+            win.style.zIndex = ++highestZ;
+            document.querySelectorAll('.os-window').forEach(w => w.classList.remove('active'));
+            win.classList.add('active');
+            
+            if(id === 'tool-win') {
+                const tooltip2 = document.getElementById('tooltip-2');
+                if(tooltip2) { tooltip2.style.opacity = '0'; tooltip2.style.visibility = 'hidden'; }
+                const ringTool = document.getElementById('ring-tool');
+                if(ringTool) ringTool.classList.remove('active');
+            }
+            if(id === 'letter-win' && !letterTyped) {
+                startTypewriter();
+            }
+            
+            updateDockState();
+        }
+
+        function toggleWindow(id) {
+            const win = document.getElementById(id);
+            const wm = document.getElementById('window-manager');
+            
+            if (wm.classList.contains('overview-mode')) {
+                wm.classList.remove('overview-mode');
+                document.getElementById('overview-btn').classList.remove('active');
+            }
+
+            if (win.style.display === 'none' || win.style.display === '') {
+                win.style.display = 'flex';
+                win.style.zIndex = ++highestZ;
+                document.querySelectorAll('.os-window').forEach(w => w.classList.remove('active'));
+                win.classList.add('active');
+            } else {
+                if (win.classList.contains('active')) {
+                    win.style.display = 'none';
+                    win.classList.remove('active');
+                    
+                    let maxZ = 0; let nextWin = null;
+                    document.querySelectorAll('.os-window').forEach(w => {
+                        if (w.style.display !== 'none' && w.style.display !== '' && w.id !== id) {
+                            let z = parseInt(w.style.zIndex || 0);
+                            if (z > maxZ) { maxZ = z; nextWin = w; }
+                        }
+                    });
+                    if (nextWin) nextWin.classList.add('active');
+                } else {
+                    win.style.zIndex = ++highestZ;
+                    document.querySelectorAll('.os-window').forEach(w => w.classList.remove('active'));
+                    win.classList.add('active');
+                }
+            }
+            
+            if(id === 'tool-win') {
+                const tooltip2 = document.getElementById('tooltip-2');
+                if(tooltip2) { tooltip2.style.opacity = '0'; tooltip2.style.visibility = 'hidden'; }
+                const ringTool = document.getElementById('ring-tool');
+                if(ringTool) ringTool.classList.remove('active');
+            }
+            if(id === 'letter-win' && !letterTyped) {
+                startTypewriter();
+            }
+            
+            updateDockState();
+        }
+
+        function closeWindow(id) { 
+            document.getElementById(id).style.display = 'none'; 
+            updateDockState();
+        }
+
+        function toggleMaximize(id) {
+            const win = document.getElementById(id);
+            win.classList.toggle('maximized');
+            if (id === 'cert-win') {
+                const tooltipMax = document.getElementById('tooltip-max');
+                if(tooltipMax) { tooltipMax.style.opacity = '0'; tooltipMax.style.visibility = 'hidden'; }
+            }
+        }
+
+        function startDrag(e, id) {
+            const win = document.getElementById(id);
+            const wm = document.getElementById('window-manager');
+            
+            if (win.classList.contains('maximized') || wm.classList.contains('overview-mode')) return;
+
+            win.style.zIndex = ++highestZ;
+            document.querySelectorAll('.os-window').forEach(w => w.classList.remove('active'));
+            win.classList.add('active');
+            updateDockState();
+
+            let startX = e.clientX, startY = e.clientY;
+            let startLeft = win.offsetLeft, startTop = win.offsetTop;
+            
+            function drag(e) {
+                win.style.left = (startLeft + e.clientX - startX) + 'px';
+                win.style.top = (startTop + e.clientY - startY) + 'px';
+            }
+            function stopDrag() {
+                document.removeEventListener('mousemove', drag);
+                document.removeEventListener('mouseup', stopDrag);
+            }
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+        }
+
+        document.querySelectorAll('.os-window').forEach(win => {
+            win.addEventListener('mousedown', function() {
+                const wm = document.getElementById('window-manager');
+                if(wm.classList.contains('overview-mode')) return; 
+
+                this.style.zIndex = ++highestZ;
+                document.querySelectorAll('.os-window').forEach(w => w.classList.remove('active'));
+                this.classList.add('active');
+                updateDockState();
+            });
+        });
+
+        // --- Terminal Logic ---
+        let termState = 0; 
+        let termFirstName = "";
+        let termLastName = "";
+        
+        function initTerminalFlow() {
+            if (termState > 0) return; 
+            
+            const out = document.getElementById('term-output');
+            const inputWrapper = document.getElementById('term-input-wrapper');
+            const termInput = document.getElementById('term-input');
+            const prompt = document.getElementById('term-prompt');
+            
+            out.innerHTML = `<span class="term-user">root</span><span style="color:#fff;">@</span><span class="term-host">owasp-os</span>:~$ ./crt_provision.sh<br>`;
+            
+            setTimeout(() => { out.innerHTML += `<span class="term-out">[+] Initializing secure identity provisioning...</span><br>`; }, 600);
+            setTimeout(() => { out.innerHTML += `<span class="term-out">[+] Connecting to OWASP verification matrix... OK</span><br><br>`; }, 1200);
+            
+            setTimeout(() => {
+                inputWrapper.style.display = 'flex';
+                prompt.innerText = "Enter Target First Name: ";
+                termInput.focus();
+                termState = 1;
+            }, 1800);
+        }
+
+        function handleTerminalInput(e) {
+            if (e.key === 'Enter') {
+                const val = e.target.value.trim();
+                const out = document.getElementById('term-output');
+                const prompt = document.getElementById('term-prompt');
+                
+                if (termState === 1) {
+                    if(!val) return;
+                    termFirstName = val;
+                    out.innerHTML += `<span style="color:#9d4edd;">Enter Target First Name: </span>${val}<br>`;
+                    e.target.value = '';
+                    prompt.innerText = "Enter Target Last Name: ";
+                    termState = 2;
+                } 
+                else if (termState === 2) {
+                    if(!val) return;
+                    termLastName = val;
+                    out.innerHTML += `<span style="color:#9d4edd;">Enter Target Last Name: </span>${val}<br><br>`;
+                    out.innerHTML += `<span class="term-success">[✓] Identity parsed successfully.</span><br>`;
+                    out.innerHTML += `<span class="term-out">[*] Generating repository issue request...</span><br>`;
+                    e.target.value = '';
+                    document.getElementById('term-input-wrapper').style.display = 'none';
+                    termState = 3;
+                    
+                    setTimeout(() => {
+                        const fullName = termFirstName + " " + termLastName;
+                        const repoOwner = "Galaxy-sc"; 
+                        const repoName = "test"; 
+                        const issueTitle = encodeURIComponent("Cert Request: Generate My Certificate");
+                        const issueBody = encodeURIComponent(`لطفا مدرک مشارکت من در پروژه‌های OWASP را صادر کنید.\n\nFullName: ${fullName}`);
+                        const issueUrl = `https://github.com/${repoOwner}/${repoName}/issues/new?title=${issueTitle}&body=${issueBody}`;
+                        window.open(issueUrl, '_blank');
+                    }, 1500);
+                }
+            }
+        }
+
+        // --- Original Letter Writer ---
+        let letterTyped = false;
+        const letterLines = [
+            "Initiating secure connection...",
+            "<br>The open web faces relentless threats daily.",
+            "Its defense relies on the dedication of <span class='highlight'>exceptional individuals</span>.",
+            "Through your research and code, you have strengthened our collective security.",
+            "The <span class='owasp-text'>OWASP Foundation</span> recognizes your vital impact.",
+            "<br><span style='color:#64748b;'>-- OWASP-CRT Project Leader</span>",
+            "<br>> Execute CRT_Gen.sh to claim your verifiable credential."
+        ];
+
+        function startTypewriter() {
+            letterTyped = true;
+            const container = document.getElementById('typewriter-text');
+            const cursor = document.getElementById('tw-cursor');
+            cursor.style.display = 'inline-block';
+            container.innerHTML = '';
+            
+            let currentLine = 0; let currentChar = 0; let isTag = false; let tagBuffer = '';
+
+            function type() {
+                if (currentLine < letterLines.length) {
+                    let lineStr = letterLines[currentLine];
+                    if (currentChar < lineStr.length) {
+                        let char = lineStr.charAt(currentChar);
+                        if (char === '<') isTag = true;
+                        if (isTag) {
+                            tagBuffer += char;
+                            if (char === '>') {
+                                isTag = false; container.insertAdjacentHTML('beforeend', tagBuffer); tagBuffer = '';
+                            }
+                        } else {
+                            container.insertAdjacentHTML('beforeend', char);
+                        }
+                        currentChar++;
+                        setTimeout(type, isTag ? 0 : 30);
+                    } else {
+                        container.insertAdjacentHTML('beforeend', '<br>');
+                        currentLine++; currentChar = 0;
+                        setTimeout(type, 500);
+                    }
+                }
+            }
+            setTimeout(type, 500);
+        }
+
+        // --- Telemetry Activation ---
+        function activateTelemetry(tier, stats) {
+            const badge = document.getElementById('telemetry-status');
+            badge.innerText = 'CONNECTED'; badge.classList.add('active');
+
+            // بارگذاری آمار واقعی از فایل JSON
+            setTimeout(() => { document.getElementById('val-commits').innerText = stats.merged_commits || '--'; document.getElementById('bar-commits').style.width = '85%'; }, 500);
+            setTimeout(() => { document.getElementById('val-prs').innerText = stats.pr_count || '0'; document.getElementById('bar-prs').style.width = '60%'; }, 800);
+            setTimeout(() => { document.getElementById('val-issues').innerText = stats.issue_count || '0'; document.getElementById('bar-issues').style.width = '75%'; }, 1100);
+            setTimeout(() => { 
+                document.getElementById('val-added').innerText = '+' + (stats.lines_added || '0'); 
+                document.getElementById('val-removed').innerText = '-' + (stats.lines_removed || '0'); 
+                document.getElementById('val-projects').innerText = 'Verified'; 
+            }, 1500);
+
+            let nextTier = 'SILVER'; let progressPct = '65%'; let fillPct = '65%';
+            let currentTier = (tier || "").toUpperCase();
+            
+            let tierColor = '#ff2a5f'; 
+            let nextColor = '#4a7bfe';
+
+            if(currentTier === 'BRONZE') { 
+                nextTier = 'SILVER'; progressPct = '68%'; fillPct = '68%'; 
+                tierColor = '#ff2a5f'; nextColor = '#4a7bfe';
+            } 
+            else if(currentTier === 'SILVER') { 
+                nextTier = 'GOLD'; progressPct = '82%'; fillPct = '82%'; 
+                tierColor = '#4a7bfe'; nextColor = '#9d4edd';
+            } 
+            else if(currentTier === 'GOLD') { 
+                nextTier = 'MAX LEVEL'; progressPct = '100% Achieved'; fillPct = '100%'; 
+                tierColor = '#9d4edd'; nextColor = '#9d4edd';
+            }
+
+            setTimeout(() => {
+                document.getElementById('tier-path').innerHTML = `Next Tier Target: <span style="color:${nextColor}">${nextTier}</span>`;
+                document.getElementById('bar-tier').style.background = `linear-gradient(90deg, ${tierColor}, ${nextColor})`;
+                document.getElementById('bar-tier').style.width = fillPct;
+                document.getElementById('val-tier-pct').innerText = fillPct === '100%' ? 'Highest tier unlocked!' : `${progressPct} completed to next tier`;
+            }, 2000);
+        }
+
+        // --- Tutorial Setup ---
+        const tooltip1 = document.getElementById('tooltip-1');
+        const tooltip2 = document.getElementById('tooltip-2');
+        const ringLetter = document.getElementById('ring-letter');
+        const ringTool = document.getElementById('ring-tool');
+        let tutorialStep = 1;
+
+        function nextTutorialStep() {
+            if (tutorialStep === 1) {
+                tutorialStep = 2;
+                tooltip1.style.opacity = '0';
+                tooltip1.style.visibility = 'hidden';
+                ringLetter.classList.remove('active');
+                setTimeout(() => {
+                    tooltip2.style.opacity = '1';
+                    tooltip2.style.visibility = 'visible';
+                    ringTool.classList.add('active');
+                }, 2000);
+            }
+        }
+
+        // --- Certificate JSON Verification ---
+        window.onload = async function() {
+            const params = new URLSearchParams(window.location.search);
+            // پارامتر جدید id است
+            const certId = params.get('id');
+
+            if (certId) {
+                tooltip1.style.opacity = '0'; tooltip1.style.visibility = 'hidden'; ringLetter.classList.remove('active');
+                
+                document.getElementById('dock-cert').style.display = 'flex';
+                openWindow('cert-win');
+
+                try {
+                    // دریافت مستقیم فایل JSON از ریپازیتوری Pages
+                    const response = await fetch(`certs/${certId}.json`);
+                    
+                    if (!response.ok) {
+                        throw new Error("Certificate data not found.");
+                    }
+
+                    const payload = await response.json();
+
+                    document.getElementById('real-name').innerText = payload.real_name || payload.user;
+                    document.getElementById('user-name').innerText = "@" + payload.user;
+                    
+                    const tierEl = document.getElementById('tier-text');
+                    tierEl.innerText = payload.tier + " TIER";
+                    
+                    if(payload.tier === "Gold") { tierEl.style.color = "#9d4edd"; }
+                    else if(payload.tier === "Silver") { tierEl.style.color = "#4a7bfe"; }
+                    else { tierEl.style.color = "#ff2a5f"; }
+
+                    document.getElementById('qrcode-container').innerHTML = ""; 
+                    new QRCode(document.getElementById("qrcode-container"), {
+                        text: window.location.href, width: 100, height: 100,
+                        colorDark : "#111827", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
+                    });
+
+                    // پاس دادن آمار خوانده شده به پنل تله‌متری
+                    activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
+
+                } catch (e) {
+                    const err = document.getElementById('error-display');
+                    err.style.display = 'block'; 
+                    err.innerText = "❌ مدرک یافت نشد یا شناسه کاربری (Username) نامعتبر است.";
+                }
+            } else {
+                openWindow('guide-win');
+                setTimeout(() => {
+                    tooltip1.style.opacity = '1'; tooltip1.style.visibility = 'visible'; ringLetter.classList.add('active');
+                }, 1500);
+            }
+            updateDockState();
+        };
+    </script>
+</body>
+</html>
