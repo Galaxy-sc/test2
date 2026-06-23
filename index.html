@@ -540,7 +540,6 @@
                                 <div class="issuer-role">OWASP-CRT Project Leader</div>
                             </div>
                             
-                            <div class="qr-wrapper" id="qrcode-container"></div>
                             
                             <div class="issuer-block right">
                                 <div class="issuer-name">Dylan Zahedi</div>
@@ -991,13 +990,6 @@
 
                     // باکس تاییدیه و هش امنیتی
                     document.getElementById('verifyDetails').innerHTML = `VERIFIABLE: owasp.github.io/Community-Recognition-Tool/?id=${payload.id}<br>TIER: ${payload.tier.toUpperCase()} LEVEL`;
-
-                    // ساخت کیوآرکد در وسط فوتر
-                    document.getElementById('qrcode-container').innerHTML = ""; 
-                    new QRCode(document.getElementById("qrcode-container"), {
-                        text: window.location.href, width: 85, height: 85,
-                        colorDark : "#111827", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
-                    });
 
                     activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
 
