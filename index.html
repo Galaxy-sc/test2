@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Inter:wght@400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Inter:wght@300;400;500;600&family=Montserrat:wght@300;400;700;800&family=Oswald:wght@700&family=Roboto+Mono:wght@400;700&display=swap');
 
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
         body { background-color: #050608; color: #e2e8f0; height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; position: relative; }
@@ -250,14 +250,73 @@
         .term-input-field { background: transparent; border: none; outline: none; color: #fff; font-family: 'Fira Code', monospace; font-size: 13px; flex-grow: 1; margin-left: 8px; }
         .term-success { color: #10b981; }
 
-        .cert-viewer-content {
-            background: #ffffff; color: #111827; padding: 40px; text-align: center; border-radius: 0 0 9px 9px; 
-            position: relative; overflow: hidden; height: calc(100% - 38px); display: flex; flex-direction: column; justify-content: center; align-items: center;
+        /* =========================================
+           PREMIUM CERTIFICATE DESIGN
+           ========================================= */
+        .cert-scroll-area {
+            width: 100%; height: 100%; overflow-y: auto; background: #0a0b10;
+            display: flex; justify-content: center; padding: 40px 0; border-radius: 0 0 9px 9px;
         }
-        .cert-watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; font-weight: 900; color: #f3f4f6; opacity: 0.6; pointer-events: none; z-index: 0; }
-        .cert-layer { position: relative; z-index: 10; width: 100%; }
-        #qrcode-container canvas, #qrcode-container img { width: 100px !important; height: 100px !important; }
+        
+        .certificate-container {
+            width: 800px;
+            height: 1130px; 
+            flex-shrink: 0;
+            background-image: url('assets/Tier-3.png'); /* طبق درخواست تغییر یافت */
+            background-size: cover;
+            background-position: center;
+            position: relative;
+            color: #ffffff;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8); /* سایه تصحیح شد */
+            padding: 70px 75px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+        }
 
+        .header-center { width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; }
+        .title-wrapper { display: flex; flex-direction: column; align-items: flex-start; margin-top: 15px; }
+        .logo { margin-bottom: -5px; margin-top: 30px; }
+        .logo img { width: 150px; filter: invert(36%) sepia(43%) saturate(1750%) hue-rotate(238deg) brightness(95%) contrast(98%); }
+        .cert-title { font-family: 'Montserrat', sans-serif; font-size: 58px; font-weight: 800; letter-spacing: 6px; margin: 5px 0; color: #ffffff; }
+        .subtitle { font-family: 'Montserrat', sans-serif; font-size: 25px; font-weight: 300; letter-spacing: 6px; margin: 0 0 25px 0; color: #f1f5f9; }
+        
+        .badge-id {
+            font-family: 'Roboto Mono', monospace; background-color: rgba(162, 56, 255, 0.08);
+            border: 1px solid rgba(162, 56, 255, 0.5); padding: 8px 26px; border-radius: 40px;
+            font-size: 15px; font-weight: bold; color: #c4b5fd; letter-spacing: 1px; margin-bottom: 30px;
+        }
+
+        .verified-text {
+            align-self: flex-start; font-family: 'Montserrat', sans-serif; font-size: 14px; font-weight: 700;
+            letter-spacing: 1.2px; margin-top: 10px; margin-bottom: 0;
+            background: linear-gradient(90deg, #8833ff 0%, #d440ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .presented-to { align-self: center; font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 300; letter-spacing: 1px; margin-top: 5px; margin-bottom: 10px; }
+        
+        .participant-name {
+            align-self: flex-start; font-family: 'Oswald', sans-serif; font-size: 80px; font-weight: 700;
+            margin: 0 0 20px 0; line-height: 1; letter-spacing: -0.5px;
+            background: linear-gradient(90deg, #772ce8 0%, #d440ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        
+        .cert-description { align-self: flex-start; font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 300; line-height: 1.6; color: #cbd5e1; text-align: left; margin: 0 0 15px 0; padding-right: 15px; }
+        .repo-count { align-self: flex-start; font-family: 'Roboto Mono', monospace; color: #a238ff; font-style: italic; font-size: 13.5px; font-weight: bold; margin-bottom: 30px; }
+
+        .footer-section { align-self: flex-start; margin-top: 100px; width: 100%; }
+        .issuers-row { display: flex; justify-content: space-between; align-items: flex-end; width: 100%; margin-bottom: 25px; padding-right: 40px; }
+        .issuer-block { display: flex; flex-direction: column; position: relative; }
+        .issuer-block.left { align-items: flex-start; }
+        .issuer-block.right { align-items: flex-end; text-align: right; }
+        
+        .signature-img { position: absolute; bottom: 25px; left: 5px; height: 162px; width: auto; z-index: 1; pointer-events: none; filter: invert(36%) sepia(43%) saturate(1750%) hue-rotate(238deg) brightness(95%) contrast(98%); }
+        .issuer-name { font-family: 'Montserrat', sans-serif; font-size: 25px; font-weight: 700; color: #a238ff; margin: 0 0 3px 0; position: relative; z-index: 2; }
+        .issuer-role { font-family: 'Inter', sans-serif; font-size: 14px; color: #8b5cf6; margin: 0; }
+        
+        .qr-wrapper { background: #fff; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+        .verify-box { border: 1px solid rgba(139, 92, 246, 0.6); background-color: transparent; padding: 12px 22px; border-radius: 12px; margin-bottom: 15px; width: fit-content; }
+        .verify-text { font-family: 'Roboto Mono', monospace; font-size: 11.5px; line-height: 1.6; color: #8b5cf6; }
+        .footer-note { font-family: 'Inter', sans-serif; font-size: 11.5px; color: #8b5cf6; }
     </style>
 </head>
 <body>
@@ -291,7 +350,7 @@
             </div>
             <div class="dock-item" id="dock-cert" onclick="toggleWindow('cert-win')" style="display: none;">
                 <div class="dock-tooltip">Identity Viewer</div>
-                <svg viewBox="0 0 24 24"><path d="M12 15l-2 5l9-5l-2-5l2-5l-9 5l-2-5l-2 5l9 5z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                <svg viewBox="0 0 24 24"><path d="M12 15l-2 5l9-5l-2-5l-2-5l-9 5l-2-5l-2 5l9 5z"></path><circle cx="12" cy="10" r="3"></circle></svg>
             </div>
         </div>
 
@@ -441,10 +500,10 @@
             </div>
         </div>
 
-        <div class="os-window" id="cert-win" style="top: 10%; left: 20%; width: 800px;">
+        <div class="os-window" id="cert-win" style="top: 5%; left: 15%; width: 900px; height: 85vh;">
             <div class="tutorial-tooltip tooltip-step-3 bottom-arrow" id="tooltip-max" style="top: -70px; left: 10px;">
-                <div class="tooltip-title">HINT: FULLSCREEN</div>
-                <div class="tooltip-text">Click the green button to maximize the certificate for a better view.</div>
+                <div class="tooltip-title">HINT: SCROLL & VIEW</div>
+                <div class="tooltip-text">Scroll down to view signatures and verify the credential.</div>
             </div>
             <div class="title-bar" onmousedown="startDrag(event, 'cert-win')">
                 <div class="window-controls">
@@ -452,30 +511,50 @@
                     <div class="control-btn min-btn" onclick="toggleWindow('cert-win')"></div>
                     <div class="control-btn max-btn" id="max-btn-cert" onclick="toggleMaximize('cert-win')"></div>
                 </div>
-                <div class="window-title">OWASP_Certificate_Viewer.exe</div>
+                <div class="window-title">OWASP_CRT_Certificate.exe</div>
                 <div style="width: 40px;"></div>
             </div>
-            <div class="cert-viewer-content">
-                <div class="cert-watermark">OWASP</div>
-                <div class="cert-layer">
-                    <h1 style="font-size: 32px; font-weight: 900; color: #1f2937; margin-bottom: 5px;">Certificate of Recognition</h1>
-                    <p style="color: #4b5563; font-size: 14px; margin-bottom: 20px;">This digital credential validates the contributions of</p>
-                    <h2 id="real-name" style="font-size: 42px; font-family: serif; color: #1d4ed8; margin: 10px 0;">Name</h2>
-                    <p id="user-name" style="font-size: 16px; color: #6b7280; font-family: monospace; border-bottom: 2px solid #e5e7eb; display: inline-block; padding-bottom: 10px; margin-bottom: 20px;">@username</p>
-                    <p style="font-size: 15px; color: #374151; margin-bottom: 25px; line-height: 1.6;">
-                        Has been officially recognized as a vital contributor to the <br>
-                        <strong>Open Web Application Security Project (OWASP)</strong>.
-                    </p>
-                    <div style="background: #f9fafb; border: 1px solid #e5e7eb; padding: 15px; border-radius: 8px; margin-bottom: 25px; display: inline-block; min-width: 200px;">
-                        <p style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px;">Achievement Tier</p>
-                        <p id="tier-text" style="font-size: 28px; font-weight: bold; text-transform: uppercase; margin: 0;"></p>
+            
+            <div class="cert-scroll-area">
+                <div class="certificate-container" id="certNode">
+                    <div class="header-center">
+                        <div class="title-wrapper">
+                            <div class="logo"><img src="assets/owasp-logo.png" alt="OWASP Logo"></div>
+                            <h1 class="cert-title">CERTIFICATE</h1>
+                        </div>
+                        <h2 class="subtitle">OF CONTRIBUTION</h2>
+                        <div class="badge-id" id="certId">--</div>
                     </div>
-                    <div style="display: flex; flex-direction: column; align-items: center;">
-                        <div id="qrcode-container" style="padding: 8px; background: white; border: 1px solid #e5e7eb; border-radius: 8px; display: inline-block;"></div>
-                        <p style="font-size: 10px; color: #9ca3af; font-family: monospace; margin-top: 8px;">Scan to Verify Authentic Credential</p>
+                    
+                    <div class="verified-text">// VERIFIED CONTRIBUTOR //</div>
+                    <div class="presented-to">PRESENTED TO</div>
+                    <div class="participant-name" id="participantName">--</div>
+                    <p class="cert-description" id="certDescription">--</p>
+                    <div class="repo-count" id="repoCount">--</div>
+
+                    <div class="footer-section">
+                        <div class="issuers-row">
+                            <div class="issuer-block left">
+                                <img src="assets/sign.png" class="signature-img" alt="Signature">
+                                <div class="issuer-name">Meysam Bal-afkan</div>
+                                <div class="issuer-role">OWASP-CRT Project Leader</div>
+                            </div>
+                            
+                            <div class="qr-wrapper" id="qrcode-container"></div>
+                            
+                            <div class="issuer-block right">
+                                <div class="issuer-name">Dylan Zahedi</div>
+                                <div class="issuer-role">OWASP-CRT Project Co-Leader</div>
+                            </div>
+                        </div>
+                        
+                        <div class="verify-box">
+                            <div class="verify-text" id="verifyDetails">--</div>
+                        </div>
+                        <div class="footer-note">This certificate acknowledges contributions to OWASP projects.</div>
                     </div>
-                    <div id="error-display" style="display: none; background: #fef2f2; border: 1px solid #f87171; color: #dc2626; padding: 15px; border-radius: 8px; font-weight: bold; margin-top: 20px;"></div>
                 </div>
+                <div id="error-display" style="display: none; background: #fef2f2; border: 1px solid #f87171; color: #dc2626; padding: 15px; border-radius: 8px; font-weight: bold; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100;"></div>
             </div>
         </div>
     </div>
@@ -784,7 +863,6 @@
             setTimeout(type, 500);
         }
 
-        // --- Telemetry Activation (Redesigned for Commits & System Status) ---
         // --- Telemetry Activation (Redesigned for Real GitHub Stats) ---
         function activateTelemetry(tier, stats) {
             const badge = document.getElementById('telemetry-status');
@@ -866,60 +944,76 @@
 
         // --- Certificate JSON Verification ---
         window.onload = async function() {
-    const params = new URLSearchParams(window.location.search);
-    const certId = params.get('id');
+            const params = new URLSearchParams(window.location.search);
+            const certId = params.get('id');
 
-    if (certId) {
-        tooltip1.style.opacity = '0'; tooltip1.style.visibility = 'hidden'; ringLetter.classList.remove('active');
-        
-        document.getElementById('dock-cert').style.display = 'flex';
-        openWindow('cert-win');
+            if (certId) {
+                tooltip1.style.opacity = '0'; tooltip1.style.visibility = 'hidden'; ringLetter.classList.remove('active');
+                
+                document.getElementById('dock-cert').style.display = 'flex';
+                openWindow('cert-win');
 
-        try {
-            // آدرس مستقیم به فایل در برنچ data (بدون نیاز به بیلد Pages)
-            const repoOwner = "Galaxy-sc";
-            const repoName = "test2";
-            const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/data/certs/${certId}.json`;
-            
-            const response = await fetch(rawUrl);
-            
-            if (!response.ok) {
-                throw new Error("Certificate data not found.");
+                try {
+                    const repoOwner = "Galaxy-sc";
+                    const repoName = "test2";
+                    const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/data/certs/${certId}.json`;
+                    
+                    const response = await fetch(rawUrl);
+                    
+                    if (!response.ok) {
+                        throw new Error("Certificate data not found.");
+                    }
+
+                    const payload = await response.json();
+
+                    // اعمال مقادیر دیتابیس در قالب جدید گواهینامه
+                    const certYear = payload.last_issued ? new Date(payload.last_issued * 1000).getFullYear() : new Date().getFullYear();
+                    document.getElementById('certId').innerText = "CRT-OWASP-" + payload.id + ":" + certYear;
+                    document.getElementById('participantName').innerText = payload.real_name || payload.user;
+                    
+                    // --- داینامیک کردن عکس پس‌زمینه بر اساس Tier ---
+                    const certNode = document.getElementById('certNode');
+                    const userTier = (payload.tier || "Bronze").toUpperCase();
+                    if (userTier === "GOLD") {
+                        certNode.style.backgroundImage = "url('assets/Tier-3.png')";
+                    } else if (userTier === "SILVER") {
+                        certNode.style.backgroundImage = "url('assets/Tier-2.png')";
+                    } else {
+                        certNode.style.backgroundImage = "url('assets/Tier-1.png')";
+                    }
+                    
+                    // تولید متن داینامیک بر اساس کاربر
+                    const descText = `Recognizing valuable contributions that advanced the OWASP open source security mission, this certificate is awarded to <b>${payload.real_name || payload.user}</b> for exceptional dedication to cybersecurity. Through innovative research, project participation, and knowledge sharing on vulnerabilities and secure coding, they have strengthened global defenses against cyber threats, exemplifying integrity and collaboration.`;
+                    document.getElementById('certDescription').innerHTML = descText;
+                    
+                    // نمایش آمار کامیت و پروژه
+                    document.getElementById('repoCount').innerText = `+${payload.stats.merged_commits} COMMITS ACROSS ${payload.stats.project_count || 1} REPOSITORIES`;
+
+                    // باکس تاییدیه و هش امنیتی
+                    document.getElementById('verifyDetails').innerHTML = `VERIFIABLE: owasp.github.io/Community-Recognition-Tool/?id=${payload.id}<br>TIER: ${payload.tier.toUpperCase()} LEVEL`;
+
+                    // ساخت کیوآرکد در وسط فوتر
+                    document.getElementById('qrcode-container').innerHTML = ""; 
+                    new QRCode(document.getElementById("qrcode-container"), {
+                        text: window.location.href, width: 85, height: 85,
+                        colorDark : "#111827", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
+                    });
+
+                    activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
+
+                } catch (e) {
+                    const err = document.getElementById('error-display');
+                    err.style.display = 'block'; 
+                    err.innerText = "❌ مدرک یافت نشد یا شناسه کاربری (Username) نامعتبر است.";
+                }
+            } else {
+                openWindow('guide-win');
+                setTimeout(() => {
+                    tooltip1.style.opacity = '1'; tooltip1.style.visibility = 'visible'; ringLetter.classList.add('active');
+                }, 1500);
             }
-
-            const payload = await response.json();
-
-            document.getElementById('real-name').innerText = payload.real_name || payload.user;
-            document.getElementById('user-name').innerText = "@" + payload.user;
-            
-            const tierEl = document.getElementById('tier-text');
-            tierEl.innerText = payload.tier + " TIER";
-            
-            if(payload.tier === "Gold") { tierEl.style.color = "#9d4edd"; }
-            else if(payload.tier === "Silver") { tierEl.style.color = "#4a7bfe"; }
-            else { tierEl.style.color = "#ff2a5f"; }
-
-            document.getElementById('qrcode-container').innerHTML = ""; 
-            new QRCode(document.getElementById("qrcode-container"), {
-                text: window.location.href, width: 100, height: 100,
-                colorDark : "#111827", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L
-            });
-
-            activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
-
-        } catch (e) {
-            const err = document.getElementById('error-display');
-            err.style.display = 'block'; 
-            err.innerText = "❌ مدرک یافت نشد یا شناسه کاربری (Username) نامعتبر است.";
-        }
-    } else {
-        openWindow('guide-win');
-        setTimeout(() => {
-            tooltip1.style.opacity = '1'; tooltip1.style.visibility = 'visible'; ringLetter.classList.add('active');
-        }, 1500);
-    }
-    updateDockState();
-};
+            updateDockState();
+        };
     </script>
 </body>
 </html>
