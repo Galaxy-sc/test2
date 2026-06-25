@@ -10,6 +10,8 @@ concurrency:
 
 jobs:
   build-cert:
+    # Workflow will only trigger if the issue title contains "Cert Request"
+    if: contains(github.event.issue.title, 'Cert Request')
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -36,7 +38,6 @@ jobs:
           USER_INPUT: ${{ github.actor }} 
           USER_ID: ${{ github.actor_id }}
           ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
           GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
@@ -46,11 +47,7 @@ jobs:
           user = os.environ['USER_INPUT']
           user_id = os.environ['USER_ID']
           issue_body = os.environ['ISSUE_BODY']
-          issue_title = os.environ['ISSUE_TITLE']
           gh_token = os.environ['GH_TOKEN']
-          
-          if "Cert Request" not in issue_title:
-              sys.exit(0)
               
           name_match = re.search(r'FullName:\s*(.+)', issue_body)
           real_name = name_match.group(1).strip() if name_match else user
@@ -68,7 +65,7 @@ jobs:
                       if time_passed < cooldown_seconds:
                           hours_left = int((cooldown_seconds - time_passed) / 3600)
                           mins_left = int(((cooldown_seconds - time_passed) % 3600) / 60)
-                          error_msg = f"⏳ **محدودیت سیستم:** شما اخیراً مدرک خود را بروزرسانی کرده‌اید. لطفا {hours_left} ساعت و {mins_left} دقیقه دیگر مجدداً تلاش کنید."
+                          error_msg = f"⏳ **System Limit:** You have recently updated your certificate. Please try again in {hours_left} hours and {mins_left} minutes."
                           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
                               env_file.write(f"ERROR_MSG={error_msg}\n")
                           sys.exit(1)
@@ -91,21 +88,21 @@ jobs:
               except Exception as e:
                   print(f"::error::GraphQL Error: {e}")
                   with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                      f.write(f"ERROR_MSG=❌ ارتباط با سرور گراف‌کیوال قطع شد. بررسی کنید توکن PAT تنظیم شده باشد.\n")
+                      f.write(f"ERROR_MSG=❌ Connection to the GraphQL server was lost. Please verify that the PAT token is set.\n")
                   sys.exit(1)
 
-          # --- 2. دریافت GraphQL Node ID کاربر ---
+          # --- 2. Get User's GraphQL Node ID ---
           id_query = """query($login: String!) { user(login: $login) { id } }"""
           id_res = run_graphql(id_query, {"login": user})
           
           if not id_res or 'errors' in id_res or not id_res.get('data', {}).get('user'):
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write(f"ERROR_MSG=❌ کاربر @{user} در سیستم گراف‌کیوال گیت‌هاب یافت نشد.\n")
+                  f.write(f"ERROR_MSG=❌ User @{user} was not found in GitHub's GraphQL system.\n")
               sys.exit(1)
               
           graphql_author_id = id_res['data']['user']['id']
 
-          # --- 3. کوئری اصلی برای استخراج دیتا ---
+          # --- 3. Main Query for Data Extraction ---
           main_query = """
           query($login: String!, $authorId: ID!) {
             rateLimit { cost remaining limit }
@@ -120,7 +117,7 @@ jobs:
                         ... on Commit {
                           history(author: { id: $authorId }, first: 100) {
                             edges {
-                              node { oid message additions deletions }
+                              node { oid message additions deletions committedDate }
                             }
                           }
                         }
@@ -146,6 +143,7 @@ jobs:
           total_removed = 0
           repo_stats = {}
           commit_logs = []
+          first_commit_date = None
 
           for repo_edge in contributed_repos:
               repo_node = repo_edge.get('node', {})
@@ -169,6 +167,11 @@ jobs:
                   sha = commit['oid'][:7]
                   added = commit['additions']
                   removed = commit['deletions']
+                  c_date = commit['committedDate'] # Format: 2023-01-01T12:00:00Z
+                  
+                  # Compare dates as strings (ISO 8601 format allows string comparison) to find the oldest
+                  if not first_commit_date or c_date < first_commit_date:
+                      first_commit_date = c_date
                   
                   total_commits += 1
                   total_added += added
@@ -179,29 +182,32 @@ jobs:
                   repo_stats[repo_name]['removed'] += removed
                   
                   commit_url = f"https://github.com/{repo_name}/commit/{commit['oid']}"
-                  commit_logs.append(f"- [{sha}]({commit_url}) در **{repo_name}**: +{added} / -{removed} خط")
+                  commit_logs.append(f"- [{sha}]({commit_url}) in **{repo_name}**: +{added} / -{removed} lines")
 
           total_projects = len(repo_stats)
 
           if total_commits == 0:
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write(f"ERROR_MSG=کاربر @{user} هیچ کامیت تایید شده‌ای در شاخه اصلی پروژه‌های عمومی OWASP ندارد.\n")
+                  f.write(f"ERROR_MSG=User @{user} has no verified commits in the default branch of public OWASP projects.\n")
               sys.exit(1)
 
-          # --- 4. ساخت گزارش نهایی ---
-          report = "#### 📊 فاکتور شفاف سیستم تله‌متری (Powered by GraphQL)\n"
-          report += f"> **خلاصه:** {total_commits} کامیت در {total_projects} پروژه ⟵ (+{total_added} خط اضافه / -{total_removed} خط حذف)\n\n"
+          # Extract just the Date part (YYYY-MM-DD) from ISO format
+          first_commit_display = first_commit_date.split('T')[0] if first_commit_date else "N/A"
+
+          # --- 4. Generate Final Report ---
+          report = "#### 📊 Transparent Telemetry System Factor (Powered by GraphQL)\n"
+          report += f"> **Summary:** {total_commits} commits across {total_projects} projects ⟵ (+{total_added} lines added / -{total_removed} lines removed)\n\n"
           
-          report += "**تفکیک پروژه‌های درگیر (Repositories):**\n"
+          report += "**Breakdown of Involved Projects (Repositories):**\n"
           for repo, stats in repo_stats.items():
-              report += f"- **[{repo}](https://github.com/{repo})**: {stats['commits']} کامیت ⟵ (+{stats['added']} / -{stats['removed']})\n"
+              report += f"- **[{repo}](https://github.com/{repo})**: {stats['commits']} commits ⟵ (+{stats['added']} / -{stats['removed']})\n"
           
           report += "\n<details>\n"
-          report += "<summary><b>🔍 مشاهده جزئیات تک‌تک کامیت‌ها (کلیک کنید)</b></summary>\n\n"
+          report += "<summary><b>🔍 View Individual Commit Details (Click to Expand)</b></summary>\n\n"
           report += "\n".join(commit_logs)
           report += "\n</details>\n"
 
-          # --- 5. ذخیره دیتابیس ---
+          # --- 5. Save to Database ---
           if total_commits >= 50: tier = "Gold"
           elif total_commits >= 10: tier = "Silver"
           else: tier = "Bronze"
@@ -215,6 +221,7 @@ jobs:
               "tier": tier, 
               "last_issued": int(time.time()),
               "stats": {
+                  "first_commit_date": first_commit_display,
                   "merged_commits": str(total_commits),
                   "project_count": str(total_projects),
                   "lines_added": str(total_added), 
@@ -234,6 +241,7 @@ jobs:
               f.write(f"TIER={tier}\n")
               f.write(f"REAL_NAME={real_name}\n")
               f.write(f"CERT_ID={cert_id}\n")
+              f.write(f"FIRST_COMMIT={first_commit_display}\n")
               f.write("LOG_REPORT<<EOF\n")
               f.write(report)
               f.write("\nEOF\n")
@@ -256,12 +264,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
-          gh issue comment $ISSUE --body "### 🎉 تبریک! مدرک شما صادر/بروزرسانی شد.
-          **نام ثبت شده:** ${{ env.REAL_NAME }}
-          **شناسه یکتا:** \`${{ env.CERT_ID }}\`
-          **سطح:** ${{ env.TIER }}
+          gh issue comment $ISSUE --body "### 🎉 Congratulations! Your certificate has been issued/updated.
+          **Registered Name:** ${{ env.REAL_NAME }}
+          **Unique ID:** \`${{ env.CERT_ID }}\`
+          **First Contribution:** ${{ env.FIRST_COMMIT }}
+          **Tier:** ${{ env.TIER }}
           
-          🔗 [**>> برای مشاهده و دریافت مدرک کلیک کنید <<**](${{ env.CERT_URL }})
+          🔗 [**>> Click Here to View and Download Certificate <<**](${{ env.CERT_URL }})
           
           ---
           ${{ env.LOG_REPORT }}"
