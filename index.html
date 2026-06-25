@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OWASP OS | CRT Workspace</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.5.0/lib/qr-code-styling.js"></script>
-
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;500;700&family=Inter:wght@300;400;500;600&family=Montserrat:wght@300;400;700;800&family=Oswald:wght@700&family=Roboto+Mono:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cascadia+Mono:ital,wght@0,200..700;1,200..700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Cascadia+Code:ital,wght@0,200..700;1,200..700&family=Cascadia+Mono:ital,wght@0,200..700;1,200..700&display=swap');
+    </style>
 
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+
+    <style>
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
         body { background-color: #050608; color: #e2e8f0; height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; position: relative; }
 
@@ -130,7 +134,7 @@
         .desktop-icon:hover .svg-icon { stroke: #ff2a5f; filter: drop-shadow(0 0 12px rgba(255, 42, 95, 0.7)); }
         .desktop-icon span { font-size: 11px; color: #e2e8f0; text-shadow: 0 2px 4px #000; font-family: 'Fira Code', monospace; display: block; line-height: 1.4; }
 
-        /* --- Telemetry Panel (Redesigned) --- */
+        /* --- Telemetry Panel --- */
         .metrics-panel {
             position: absolute; right: 20px; top: 0px; width: 280px;
             background: rgba(13, 15, 22, 0.7); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
@@ -256,152 +260,20 @@
         .term-success { color: #10b981; }
 
         /* =========================================
-           PREMIUM DYNAMIC CERTIFICATE DESIGN
+           CANVAS CERTIFICATE DESIGN
            ========================================= */
         .cert-scroll-area {
             width: 100%; height: 100%; overflow-y: auto; background: #0a0b10;
             display: flex; justify-content: center; padding: 40px 0; border-radius: 0 0 9px 9px;
         }
         
-        .certificate-container {
-            --cert-primary: #a238ff;
-            --cert-primary-light: #8b5cf6;
-            --cert-primary-dim: rgba(162, 56, 255, 0.08);
-            --cert-primary-border: rgba(162, 56, 255, 0.5);
-            --cert-grad-start: #772ce8;
-            --cert-grad-end: #d440ff;
-            --cert-text-highlight: #c4b5fd;
-            --img-filter: invert(31%) sepia(94%) saturate(4649%) hue-rotate(264deg) brightness(101%) contrast(110%);
-
+        #cert-canvas {
             width: 800px;
-            height: 1130px; 
+            height: 1130px;
             flex-shrink: 0;
-            background-size: cover;
-            background-position: center;
-            position: relative;
-            color: #ffffff;
+            background: #171c24;
             box-shadow: 0 15px 40px rgba(0,0,0,0.8);
-            padding: 70px 75px;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            transition: all 0.5s ease;
-        }
-
-        .certificate-container.tier-gold {
-            --cert-primary: #a238ff;
-            --cert-primary-light: #8b5cf6;
-            --cert-primary-dim: rgba(162, 56, 255, 0.08);
-            --cert-primary-border: rgba(162, 56, 255, 0.5);
-            --cert-grad-start: #772ce8;
-            --cert-grad-end: #d440ff;
-            --cert-text-highlight: #c4b5fd;
-            --img-filter: invert(31%) sepia(94%) saturate(4649%) hue-rotate(264deg) brightness(101%) contrast(110%);
-        }
-
-        .certificate-container.tier-silver {
-            --cert-primary: #4a7bfe;
-            --cert-primary-light: #60a5fa;
-            --cert-primary-dim: rgba(74, 123, 254, 0.08);
-            --cert-primary-border: rgba(74, 123, 254, 0.5);
-            --cert-grad-start: #2563eb;
-            --cert-grad-end: #60a5fa;
-            --cert-text-highlight: #93c5fd;
-            --img-filter: invert(49%) sepia(61%) saturate(3501%) hue-rotate(209deg) brightness(101%) contrast(105%);
-        }
-
-        .certificate-container.tier-bronze {
-            --cert-primary: #ff1469;
-            --cert-primary-light: #ff4d8d;
-            --cert-primary-dim: rgba(255, 20, 105, 0.08);
-            --cert-primary-border: rgba(255, 20, 105, 0.5);
-            --cert-grad-start: #d4004c;
-            --cert-grad-end: #ff1469;
-            --cert-text-highlight: #ff85b3;
-            --img-filter: invert(24%) sepia(90%) saturate(4203%) hue-rotate(326deg) brightness(100%) contrast(107%);
-        }
-
-        .header-center { width: 100%; text-align: center; display: flex; flex-direction: column; align-items: center; }
-        .title-wrapper { display: flex; flex-direction: column; align-items: flex-start; margin-top: 15px; }
-        
-        .logo { margin-bottom: -5px; margin-top: 30px; }
-        .logo img { 
-            width: 150px; 
-            filter: var(--img-filter); 
-            transition: filter 0.5s ease; 
-        }
-        
-        .cert-title { font-family: 'Montserrat', sans-serif; font-size: 58px; font-weight: 800; letter-spacing: 6px; margin: 5px 0; color: #ffffff; }
-        .subtitle { font-family: 'Montserrat', sans-serif; font-size: 25px; font-weight: 300; letter-spacing: 6px; margin: 0 0 25px 0; color: #f1f5f9; }
-        
-        .badge-id {
-            font-family: 'Roboto Mono', monospace; 
-            background-color: var(--cert-primary-dim);
-            border: 2px solid var(--cert-primary-border); 
-            padding: 8px 26px; border-radius: 40px;
-            font-size: 15px; font-weight: bold; 
-            color: var(--cert-primary); 
-            letter-spacing: 1px; margin-bottom: 30px;
-            transition: all 0.5s ease;
-        }
-
-        .verified-text {
-            align-self: flex-start; font-family: 'Montserrat', sans-serif; font-size: 14px; font-weight: 700;
-            letter-spacing: 1.2px; margin-top: 10px; margin-bottom: 0;
-            background: linear-gradient(90deg, var(--cert-grad-start) 0%, var(--cert-grad-end) 100%); 
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            transition: all 0.5s ease;
-        }
-        .presented-to { align-self: center; font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 300; letter-spacing: 1px; margin-top: 5px; margin-bottom: 10px; color: #ddd; }
-        
-        .participant-name {
-            align-self: flex-start; font-family: 'Oswald', sans-serif; font-size: 80px; font-weight: 700;
-            margin: 0 0 20px 0; line-height: 1; letter-spacing: -0.5px;
-            color: var(--cert-primary);
-            transition: all 0.5s ease;
-        }
-        
-        .cert-description { align-self: flex-start; font-family: 'Inter', sans-serif; font-size: 18px; font-weight: 300; line-height: 1.6; color: #cbd5e1; text-align: left; margin: 0 0 15px 0; padding-right: 15px; }
-        
-        .repo-count { 
-            align-self: flex-start; font-family: 'Roboto Mono', monospace; 
-            color: var(--cert-primary); 
-            font-style: italic; font-size: 13.5px; font-weight: bold; margin-bottom: 30px; 
-            transition: color 0.5s ease;
-        }
-
-        .footer-section { align-self: flex-start; margin-top: 100px; width: 100%; }
-        .issuers-row { display: flex; justify-content: space-between; align-items: flex-start; width: 100%; margin-bottom: 25px; padding-right: 40px; }
-        .issuer-block { display: flex; flex-direction: column; position: relative; }
-        .issuer-block.left { align-items: flex-start; }
-        .issuer-block.right { align-items: flex-end; text-align: right; }
-        
-        .signature-img { 
-            position: absolute; bottom: 25px; left: 5px; height: 162px; width: auto; 
-            z-index: 1; pointer-events: none; 
-            filter: var(--img-filter); 
-            transition: filter 0.5s ease; 
-        }
-        
-        .issuer-name { 
-            font-family: 'Montserrat', sans-serif; font-size: 25px; font-weight: 700; 
-            color: var(--cert-primary); margin: 0 0 3px 0; position: relative; z-index: 2; 
-            transition: color 0.5s ease;
-        }
-        
-        .issuer-role { 
-            font-family: 'Inter', sans-serif; font-size: 14px; 
-            color: var(--cert-primary); margin: 0; 
-            transition: color 0.5s ease;
-        }
-        
-        .qr-wrapper { 
-            margin-bottom: 10px; 
-            margin-top: 15px; 
-            width: fit-content; 
-            position: relative; 
-            z-index: 5;
-            /* بک‌گراند سفید و پدینگ حذف شدند */
+            transition: transform 0.5s ease;
         }
 
     </style>
@@ -603,42 +475,7 @@
             </div>
             
             <div class="cert-scroll-area">
-                <div class="certificate-container tier-gold" id="certNode">
-                    <div class="header-center">
-                        <div class="title-wrapper">
-                            <div class="logo"><img src="assets/owasp-logo.png" alt="OWASP Logo"></div>
-                            <h1 class="cert-title">CERTIFICATE</h1>
-                        </div>
-                        <h2 class="subtitle">OF CONTRIBUTION</h2>
-                        <div class="badge-id" id="certId">--</div>
-                    </div>
-                    
-                    <div class="verified-text">// VERIFIED CONTRIBUTOR // VERIFIED CONTRIBUTOR</div>
-                    <div class="presented-to">PRESENTED TO</div>
-                    <div class="participant-name" id="participantName">--</div>
-                    <p class="cert-description" id="certDescription">--</p>
-                    <div class="repo-count" id="repoCount">--</div>
-
-                    <div class="footer-section">
-                        <div class="issuers-row">
-                            <div class="issuer-block left">
-                                <!-- این دیو اضافه شد تا عکس امضا فقط روی اسم قفل بشه -->
-                                <div style="position: relative; display: flex; flex-direction: column; align-items: flex-start;">
-                                    <img src="assets/sign.png" class="signature-img" alt="Signature">
-                                    <div class="issuer-name">Meysam Bal-afkan</div>
-                                    <div class="issuer-role">OWASP-CRT Project Leader</div>
-                                </div>
-                                <!-- حالا QR Code با خیال راحت میفته پایین امضا -->
-                                <div class="qr-wrapper" id="qrcode-container" style="margin-top: 15px; position: relative; z-index: 5;"></div>
-                            </div>
-                            
-                            <div class="issuer-block right">
-                                <div class="issuer-name">Fatemeh Zahedi</div>
-                                <div class="issuer-role">OWASP-CRT Project Co-Leader</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <canvas id="cert-canvas" width="2480" height="3508"></canvas>
             </div>
         </div>
     </div>
@@ -795,26 +632,20 @@
             win.classList.toggle('maximized');
 
             if (id === 'cert-win') {
-                const cert = document.getElementById('certNode');
+                const cert = document.getElementById('cert-canvas');
 
                 if (win.classList.contains('maximized')) {
-
                     const scaleX = window.innerWidth / 800;
                     const scaleY = window.innerHeight / 1130;
-
-                    // کوچکترین نسبت را انتخاب می‌کنیم تا کل مدرک داخل صفحه جا شود
                     const scale = Math.min(scaleX, scaleY) * 0.95;
-
                     cert.style.transformOrigin = "top center";
                     cert.style.transform = `scale(${scale})`;
-
                 } else {
                     cert.style.transform = "";
                 }
             }
         }
 
-        /* اصلاح هود هوشمند Drag برای مسدود کردن حرکت پنجره به زیر تسک‌بار */
         function startDrag(e, id) {
             const win = document.getElementById(id);
             const wm = document.getElementById('window-manager');
@@ -833,7 +664,6 @@
                 let nLeft = startLeft + e.clientX - startX;
                 let nTop = startTop + e.clientY - startY;
                 
-                // لیمیت سخت‌گیرانه مرز تسک‌بار (تسک‌بار در مختصات بالایی تا 85 پیکسل فضا را قفل کرده است)
                 if (nTop < 85) nTop = 85; 
                 
                 win.style.left = nLeft + 'px';
@@ -969,38 +799,34 @@
             setTimeout(type, 500);
         }
 
-        // --- Telemetry Activation (Redesigned for Real GitHub Stats) ---
+        // --- Telemetry Activation ---
         function activateTelemetry(tier, stats) {
+            if(!stats) stats = {};
             const badge = document.getElementById('telemetry-status');
             badge.innerText = 'CONNECTED'; badge.classList.add('active');
 
-            // 1. نمایش تعداد کامیت‌ها
             setTimeout(() => { 
                 document.getElementById('val-commits').innerText = stats.merged_commits || '0'; 
                 document.getElementById('bar-commits').style.width = '100%'; 
             }, 500);
 
-            // 2. نمایش تعداد پروژه‌ها
             setTimeout(() => { 
                 document.getElementById('val-projects').innerText = stats.project_count || '0'; 
                 document.getElementById('bar-projects').style.width = '100%'; 
             }, 900);
 
-            // 3. نمایش خطوط اضافه شده (سبز)
             setTimeout(() => { 
                 const added = stats.lines_added || '0';
                 document.getElementById('val-added').innerText = '+' + added; 
                 document.getElementById('bar-added').style.width = '100%'; 
             }, 1300);
 
-            // 4. نمایش خطوط حذف شده (قرمز)
             setTimeout(() => { 
                 const removed = stats.lines_removed || '0';
                 document.getElementById('val-removed').innerText = '-' + removed; 
                 document.getElementById('bar-removed').style.width = '100%'; 
             }, 1700);
 
-            // منطق پیشرفت Tier
             let nextTier = 'SILVER'; let progressPct = '65%'; let fillPct = '65%';
             let currentTier = (tier || "").toUpperCase();
             let tierColor = '#ff2a5f'; 
@@ -1048,138 +874,294 @@
             }
         }
 
-        // --- Certificate JSON Verification ---
-        window.onload = async function() {
-    const params = new URLSearchParams(window.location.search);
-    const certId = params.get('id');
 
-    if (certId) {
-        tooltip1.style.opacity = '0'; tooltip1.style.visibility = 'hidden'; ringLetter.classList.remove('active');
-        
-        document.getElementById('dock-cert').style.display = 'flex';
-        openWindow('cert-win');
+        // ==========================================
+        // CANVAS CERTIFICATE INTEGRATION
+        // ==========================================
+        const canvas = document.getElementById("cert-canvas");
+        const ctx = canvas.getContext("2d");
+        let t = 0;
+        let certUser = {};
 
-        try {
-            const repoOwner = "Galaxy-sc";
-            const repoName = "test2";
-            const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/data/certs/${certId}.json`;
-            
-            const response = await fetch(rawUrl);
-            
-            if (!response.ok) {
-                throw new Error("Certificate data not found.");
+        // Load Images/SVGs
+        const logo = new Image();
+        logo.src = "assets/owasp-logo.svg";
+        const sign = new Image();
+        sign.src = "assets/sign.svg";
+        const pattern = new Image();
+
+        function getGradient() {
+            const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            const s = (Math.sin(t) + 1) / 2;
+            const currentTier = certUser.tier || "Bronze";
+
+            switch (currentTier) {
+                case "Bronze":
+                    g.addColorStop(0, "#ff0044");
+                    g.addColorStop(1, "#ff3396");
+                    break;
+                case "Silver":
+                    g.addColorStop(0, "#3fbbfe");
+                    g.addColorStop(1, "#4157ff");
+                    break;
+                case "Gold":
+                    g.addColorStop(0, "#ff46f0");
+                    g.addColorStop(1, "#711bff");
+                    break;
+                default:
+                    g.addColorStop(0, "#ff0044");
+                    g.addColorStop(1, "#ff3396");
+                    break;
             }
-
-            const payload = await response.json();
-
-            // اعمال مقادیر دیتابیس در قالب جدید گواهینامه
-            const certYear = payload.last_issued ? new Date(payload.last_issued * 1000).getFullYear() : new Date().getFullYear();
-            document.getElementById('certId').innerText = "CRT-OWASP-" + payload.id + ":" + certYear;
-            document.getElementById('participantName').innerText = payload.real_name || payload.user;
-            
-            // --- داینامیک کردن عکس پس‌زمینه و تم رنگی بر اساس Tier ---
-            const certNode = document.getElementById('certNode');
-            const userTier = (payload.tier || "Bronze").toUpperCase();
-            
-            // حذف کلاس‌های قبلی
-            certNode.classList.remove('tier-gold', 'tier-silver', 'tier-bronze');
-            
-            if (userTier === "GOLD") {
-                certNode.style.backgroundImage = "url('assets/Tier-3.png')";
-                certNode.classList.add('tier-gold');
-            } else if (userTier === "SILVER") {
-                certNode.style.backgroundImage = "url('assets/Tier-2.png')";
-                certNode.classList.add('tier-silver');
-            } else {
-                certNode.style.backgroundImage = "url('assets/Tier-1.png')";
-                certNode.classList.add('tier-bronze');
-            }
-            
-            // تولید متن داینامیک بر اساس کاربر
-            const descText = `Recognizing valuable contributions that advanced the OWASP open source security mission, this certificate is awarded to <b>${payload.real_name || payload.user}</b> for exceptional dedication to cybersecurity. Through innovative research, project participation, and knowledge sharing on vulnerabilities and secure coding, they have strengthened global defenses against cyber threats, exemplifying integrity and collaboration.`;
-            document.getElementById('certDescription').innerHTML = descText;
-            
-            // نمایش آمار کامیت و پروژه
-            document.getElementById('repoCount').innerText = `+${payload.stats.merged_commits} COMMITS ACROSS ${payload.stats.project_count || 1} REPOSITORIES`;
-
-            // --- تعیین رنگ QR کد بر اساس Tier فعلی ---
-            let qrColor = "#ff1469"; // پیش‌فرض (Bronze)
-            if (userTier === "GOLD") {
-                qrColor = "#a238ff";
-            } else if (userTier === "SILVER") {
-                qrColor = "#4a7bfe";
-            }
-
-            // --- ساخت QR Code با فرمت SVG (بدون کشیدگی و بی‌نهایت باکیفیت) ---
-            const container = document.getElementById('qrcode-container');
-            container.innerHTML = ""; 
-            
-            const qrCode = new QRCodeStyling({
-                width: 130,  // سایز دقیق همون باکسی که می‌خوایم
-                height: 130,
-                type: "svg", // 🔥 راز اصلی: استفاده از وکتور به جای بوم نقاشی
-                data: window.location.href, // (توی کدت اینو ثابت گذاشته بودی، من داینامیکش کردم)
-                margin: 0, 
-                qrOptions: {
-                    errorCorrectionLevel: 'Q' 
-                },
-                dotsOptions: {
-                    color: qrColor,
-                    type: "dots" // نقطه‌های بی‌نقص
-                },
-                backgroundOptions: {
-                    color: "transparent", 
-                },
-                cornersSquareOptions: {
-                    color: qrColor,
-                    type: "extra-rounded" 
-                },
-                cornersDotOptions: {
-                    color: qrColor,
-                    type: "dot" 
-                }
-            });
-
-            qrCode.append(container);
-
-            // استایل‌های کانتینر برای وسط‌چین شدن دقیق لوگو
-            container.style.width = "130px";
-            container.style.height = "130px";
-            container.style.display = "flex";
-            container.style.justifyContent = "center";
-            container.style.alignItems = "center";
-            container.style.position = "relative";
-            
-            // --- ساخت لوگوی گرد ---
-            const logoOverlay = document.createElement("img");
-            logoOverlay.src = "assets/qr-logo.png"; 
-            logoOverlay.style.position = "absolute";
-            logoOverlay.style.width = "38px"; 
-            logoOverlay.style.height = "38px";
-            logoOverlay.style.borderRadius = "50%"; 
-            logoOverlay.style.border = `3px solid ${qrColor}`; 
-            logoOverlay.style.backgroundColor = "#0a0b10"; 
-            logoOverlay.style.padding = "3px"; 
-            logoOverlay.style.zIndex = "10";
-            logoOverlay.style.objectFit = "contain";
-
-            container.appendChild(logoOverlay);
-
-            activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
-
-            activateTelemetry(payload.tier || 'BRONZE', payload.stats || {});
-
-        } catch (e) {
-            alert("❌ مدرک یافت نشد یا شناسه کاربری (Username) نامعتبر است.");
+            return g;
         }
-    } else {
-        openWindow('guide-win');
-        setTimeout(() => {
-            tooltip1.style.opacity = '1'; tooltip1.style.visibility = 'visible'; ringLetter.classList.add('active');
-        }, 1500);
-    }
-    updateDockState();
-};
+
+        function drawGradient() {
+            const g = getGradient();
+
+            ctx.fillStyle = g;
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = g;
+            ctx.beginPath();
+            ctx.roundRect(460, 1000, 1070, 120, [100]);
+            ctx.stroke();
+            ctx.globalAlpha = .1;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.font = "70px Ebrima";
+            
+            // Extract Year from stats.first_commit_date or fallback to current year
+            let certYear = new Date().getFullYear();
+            if (certUser.stats && certUser.stats.first_commit_date) {
+                certYear = certUser.stats.first_commit_date.split('-')[0];
+            } else if (certUser.first_commit) {
+                certYear = certUser.first_commit;
+            }
+
+            const certIdText = `CRT-OWASP-${certUser.id || "000"} : ${certYear}`;
+            ctx.fillText(certIdText, 460 + (1070 - ctx.measureText(certIdText).width) / 2, 1085);
+            ctx.fillText("// VERIFIED CONTRIBUTOR  // VERIFIED CONTRIBUTOR", 190, 1250);
+            ctx.font = "30px Arial";
+
+            ctx.drawImage(logo, 330, 415, 483, 145);
+            ctx.globalAlpha = .3;
+            // Draw background pattern if loaded
+            if (pattern.complete && pattern.naturalWidth !== 0) {
+                ctx.drawImage(pattern, 0, 0, 2480, 3508);
+            }
+            ctx.globalAlpha = 1;
+
+            ctx.font = "260px Impact";
+            const displayName = certUser.real_name ? capitalizeRegex(certUser.real_name) : (certUser.user || "UNKNOWN");
+            ctx.fillText(displayName, 190, 1680);
+
+            ctx.font = "italic 70px Corbel";
+            const projectCount = certUser.stats && certUser.stats.project_count ? certUser.stats.project_count : 1;
+            ctx.fillText(`${projectCount} ${projectCount == 1 ? 'Repository' : 'Repositories'}`, 190, 2450);
+
+            ctx.drawImage(sign, 300, 2460, 440, 290);
+
+            ctx.font = "Bold 90px Ebrima";
+            ctx.fillText("Meysam Bal-afkan", 190, 2850);
+            ctx.fillText("Fatemeh Zahedi", 1510, 2850);
+            ctx.font = "50px Corbel";
+            ctx.fillText("OWASP-CRT Project Leader", 190, 2930);
+            ctx.fillText("OWASP-CRT Project Co-Leader", 1510, 2930);
+
+            // Overlay gradient for visual pop
+            ctx.fillStyle = g;
+            ctx.globalCompositeOperation = "source-atop";
+            ctx.fillRect(0, 0, 2480, 3508);
+            ctx.globalCompositeOperation = "source-over";
+        }
+
+        function capitalizeRegex(str) {
+            return str.replace(/(^\w|\s\w)/g, m => m.toUpperCase());
+        }
+
+        function drawWhite() {
+            ctx.fillStyle = "white";
+            ctx.font = "bold 200px Cascadia Mono";
+            ctx.fillText("CERTIFICATE", 330, 800);
+            ctx.font = "200 100px Cascadia Code";
+            ctx.fillText("OF CONTRIBUTION", 550, 900);
+            ctx.fillText("PRESENTED TO", 640, 1400);
+            ctx.font = "200 70px Corbel";
+            
+            const displayName = certUser.real_name ? capitalizeRegex(certUser.real_name) : (certUser.user || "UNKNOWN");
+            const certText = `Recognizing valuable contributions that advanced the OWASP open source security mission, this certificate is awarded to ${displayName} for exceptional dedication to cybersecurity. Through innovative research, OWASP project participation, and knowledge sharing on vulnerabilities and secure coding, they have strengthened global defenses against cyber threats, exemplifying integrity and collaboration.`;
+            
+            drawJustifiedText(ctx, certText, 190, 1800, 2000, 90);
+        }
+
+        function drawJustifiedText(ctx, text, x, y, maxWidth, lineHeight) {
+            const words = text.split(' ');
+            let currentLine = [];
+            let currentWidth = 0;
+
+            for (let i = 0; i < words.length; i++) {
+                const word = words[i];
+                const wordWidth = ctx.measureText(word + ' ').width;
+
+                if (currentWidth + wordWidth <= maxWidth) {
+                    currentLine.push(word);
+                    currentWidth += wordWidth;
+                } else {
+                    drawLineJustified(ctx, currentLine, x, y, maxWidth);
+                    y += lineHeight;
+                    currentLine = [word];
+                    currentWidth = ctx.measureText(word + ' ').width;
+                }
+            }
+
+            if (currentLine.length > 0) {
+                ctx.textAlign = 'left';
+                ctx.fillText(currentLine.join(' '), x, y);
+            }
+            return y;
+        }
+
+        function drawLineJustified(ctx, words, x, y, maxWidth) {
+            if (words.length === 0) return;
+            if (words.length === 1) {
+                ctx.textAlign = 'left';
+                ctx.fillText(words[0], x, y);
+                return;
+            }
+
+            let totalWordsWidth = 0;
+            for (let word of words) {
+                totalWordsWidth += ctx.measureText(word).width;
+            }
+
+            const totalSpaces = words.length - 1;
+            const extraSpace = (maxWidth - totalWordsWidth) / totalSpaces;
+
+            let currentX = x;
+            for (let i = 0; i < words.length; i++) {
+                ctx.textAlign = 'left';
+                ctx.fillText(words[i], currentX, y);
+                if (i < words.length - 1) {
+                    const wordWidth = ctx.measureText(words[i]).width;
+                    currentX += wordWidth + extraSpace;
+                }
+            }
+        }
+
+        function clearCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function loop() {
+            clearCanvas();
+            generateQRCodeAdvanced();
+            drawGradient();
+            drawWhite();
+            t += 0.02;
+            requestAnimationFrame(loop);
+        }
+
+        function generateQRCodeAdvanced(options = {}) {
+            const {
+                size = 250,
+                color = '#1a1a2e',
+                dotStyle = 'rounded'
+            } = options;
+
+            const qr = qrcode(0, 'H');
+            const qrUrl = window.location.href.includes('?id=') ? window.location.href : `https://galaxy-sc.github.io/test2/?id=${certUser.id || "0"}`;
+            qr.addData(qrUrl);
+            qr.make();
+
+            const cells = qr.getModuleCount();
+            const cellSize = size / cells;
+
+            for (let row = 0; row < cells; row++) {
+                for (let col = 0; col < cells; col++) {
+                    if (qr.isDark(row, col)) {
+                        const x = 190 + col * cellSize;
+                        const y = 3000 + row * cellSize;
+                        const w = cellSize - 1;
+                        const h = cellSize - 1;
+                        ctx.fillStyle = color;
+
+                        switch (dotStyle) {
+                            case 'rounded':
+                                ctx.beginPath();
+                                ctx.arc(x + w / 2, y + h / 2, w / 2.5, 0, Math.PI * 2);
+                                ctx.fill();
+                                break;
+                            case 'diamond':
+                                ctx.beginPath();
+                                ctx.moveTo(x + w / 2, y);
+                                ctx.lineTo(x + w, y + h / 2);
+                                ctx.lineTo(x + w / 2, y + h);
+                                ctx.lineTo(x, y + h / 2);
+                                ctx.closePath();
+                                ctx.fill();
+                                break;
+                            default:
+                                ctx.fillRect(x, y, w, h);
+                        }
+                    }
+                }
+            }
+        }
+
+
+        // --- Initialize OS and Certificate Fetch ---
+        window.onload = async function() {
+            const params = new URLSearchParams(window.location.search);
+            const certId = params.get('id');
+
+            if (certId) {
+                tooltip1.style.opacity = '0'; tooltip1.style.visibility = 'hidden'; ringLetter.classList.remove('active');
+                
+                document.getElementById('dock-cert').style.display = 'flex';
+                openWindow('cert-win');
+
+                try {
+                    const repoOwner = "Galaxy-sc";
+                    const repoName = "test2";
+                    const rawUrl = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/data/certs/${certId}.json`;
+                    
+                    const response = await fetch(rawUrl);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP Error: ${response.status} - Certificate data not found.`);
+                    }
+
+                    certUser = await response.json();
+                    
+                    // Set correct pattern based on loaded tier
+                    switch (certUser.tier) {
+                        case "Bronze": pattern.src = "assets/stage-1.svg"; break;
+                        case "Silver": pattern.src = "assets/stage-2.svg"; break;
+                        case "Gold": pattern.src = "assets/stage-3.svg"; break;
+                        default: pattern.src = "assets/stage-1.svg"; break;
+                    }
+
+                    // Start the canvas animation loop once logo is ready
+                    if (logo.complete) {
+                        loop();
+                    } else {
+                        logo.onload = () => loop();
+                    }
+
+                    activateTelemetry(certUser.tier || 'BRONZE', certUser.stats || {});
+
+                } catch (e) {
+                    console.error("Fetch Error: ", e);
+                    alert("❌ مدرک یافت نشد یا در حال لود شدن است. لطفاً شناسه را بررسی کنید.");
+                }
+            } else {
+                openWindow('guide-win');
+                setTimeout(() => {
+                    tooltip1.style.opacity = '1'; tooltip1.style.visibility = 'visible'; ringLetter.classList.add('active');
+                }, 1500);
+            }
+            updateDockState();
+        };
     </script>
 </body>
 </html>
