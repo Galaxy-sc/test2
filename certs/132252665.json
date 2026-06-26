@@ -1,10 +1,11 @@
 {
   "id": "132252665",
   "user": "DylanZahedi",
-  "real_name": "dylan zhd",
+  "real_name": "zah za",
   "tier": "Bronze",
-  "last_issued": 1782312880,
+  "last_issued": 1782500372,
   "stats": {
+    "first_commit_date": "2026-02-08",
     "merged_commits": "1",
     "project_count": "1",
     "lines_added": "56",
