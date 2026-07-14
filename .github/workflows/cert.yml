@@ -49,10 +49,23 @@ jobs:
           gh_token = os.environ['GH_TOKEN']
           ORG_NAME = 'OWASP'
               
-          name_match = re.search(r'FullName:\s*(.+)', issue_body)
-          real_name = name_match.group(1).strip() if name_match else user
+          # --- Security Policy: Input Sanitization ---
+          # 1. Extract name ignoring newlines to prevent CRLF injection
+          name_match = re.search(r'FullName:\s*([^\r\n]+)', issue_body)
+          raw_name = name_match.group(1).strip() if name_match else user
 
-          # --- 1. Anti-Spam & Cooldown System (24 Hours) ---
+          # 2. Enforce length limit (max 20 characters)
+          if len(raw_name) > 20:
+              raw_name = raw_name[:20]
+              
+          # 3. Whitelist safe characters (Alphanumeric, space, dot, hyphen)
+          safe_name = re.sub(r'[^\w\s.\-]', '', raw_name).strip()
+          
+          # 4. Fallback to username if the sanitized string is empty
+          real_name = safe_name if safe_name else user
+          # -------------------------------------------
+
+          # --- Anti-Spam & Cooldown System (24 Hours) ---
           cooldown_seconds = 24 * 3600
           cert_path = f"db_branch/certs/{user_id}.json"
           if os.path.exists(cert_path):
@@ -93,7 +106,7 @@ jobs:
                       f.write(f"ERROR_MSG=❌ Connection to the GraphQL server was lost. Please verify that the PAT token is set.\n")
                   sys.exit(1)
 
-          # --- 2. Get User's GraphQL Node ID ---
+          # --- Get User's GraphQL Node ID ---
           print(f"[*] Fetching ID for user: {user}...")
           id_query = """query($login: String!) { user(login: $login) { id } }"""
           id_res = run_graphql(id_query, {"login": user})
@@ -218,7 +231,7 @@ jobs:
                       'type': 'PR'
                   }
 
-          # --- 4. Process Gathered Data ---
+          # --- Process Gathered Data ---
           total_commits = len(unique_commits)
           
           if total_commits == 0:
@@ -232,7 +245,7 @@ jobs:
           first_commit_date = min(c['date'] for c in unique_commits.values())
           first_commit_display = first_commit_date.split('T')[0] if first_commit_date else "N/A"
 
-          # --- 5. Algorithm & Tier Calculation ---
+          # --- Algorithm & Tier Calculation ---
           P99_ADD = 290764.32000000024
           P99_DEL = 130211.56000000004
           P99_CMT = 536.5200000000004
@@ -268,7 +281,7 @@ jobs:
               else:
                   tier = "Bronze"
 
-          # --- 6. Generate Report ---
+          # --- Generate Report ---
           repo_stats = {}
           commit_logs = []
           sorted_commits = sorted(unique_commits.items(), key=lambda x: x[1]['date'])
@@ -300,7 +313,7 @@ jobs:
           report += "\n".join(commit_logs)
           report += "\n</details>\n"
 
-          # --- 7. Save to Database ---
+          # --- Save to Database ---
           cert_id = user_id
           
           payload = {
@@ -339,11 +352,13 @@ jobs:
 
       - name: Commit and Push JSON to Data Branch
         if: success() && env.CERT_URL != ''
+        env:
+          CERT_ID: ${{ env.CERT_ID }}
         run: |
           cd db_branch
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add certs/${{ env.CERT_ID }}.json
+          git add certs/$CERT_ID.json
           git commit -m "db(crt): save cert data for @${{ github.actor }} [skip ci]" || echo "No changes to commit"
           git pull --rebase origin data
           git push origin data
@@ -355,15 +370,15 @@ jobs:
           ISSUE: ${{ github.event.issue.number }}
         run: |
           gh issue comment $ISSUE --body "### 🎉 Congratulations! Your certificate has been issued/updated.
-          **Registered Name:** ${{ env.REAL_NAME }}
-          **Unique ID:** \`${{ env.CERT_ID }}\`
-          **First Contribution:** ${{ env.FIRST_COMMIT }}
-          **Achieved Tier:** ${{ env.TIER }}
+          **Registered Name:** $REAL_NAME
+          **Unique ID:** \`$CERT_ID\`
+          **First Contribution:** $FIRST_COMMIT
+          **Achieved Tier:** $TIER
           
-          🔗 [**>> Click Here to View and Download Certificate <<**](${{ env.CERT_URL }})
+          🔗 [**>> Click Here to View and Download Certificate <<**]($CERT_URL)
           
           ---
-          ${{ env.LOG_REPORT }}"
+          $LOG_REPORT"
           gh issue close $ISSUE --reason "completed"
 
       - name: Comment Failure & Close Issue
@@ -372,5 +387,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
-          gh issue comment $ISSUE --body "${{ env.ERROR_MSG }}"
+          gh issue comment $ISSUE --body "$ERROR_MSG"
           gh issue close $ISSUE --reason "not planned"
