@@ -49,20 +49,21 @@ jobs:
           gh_token = os.environ['GH_TOKEN']
           ORG_NAME = 'OWASP'
               
-          # --- Security Policy: Input Sanitization ---
-          # 1. Extract name ignoring newlines to prevent CRLF injection
+          # --- Security Policy: Input Validation ---
           name_match = re.search(r'FullName:\s*([^\r\n]+)', issue_body)
           raw_name = name_match.group(1).strip() if name_match else user
 
-          # 2. Enforce length limit (max 20 characters)
           if len(raw_name) > 20:
-              raw_name = raw_name[:20]
+              with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
+                  f.write("ERROR_MSG=❌ Security Violation: The provided name exceeds the maximum limit of 20 characters.\n")
+              sys.exit(1)
               
-          # 3. Whitelist safe characters (Alphanumeric, space, dot, hyphen)
-          safe_name = re.sub(r'[^\w\s.\-]', '', raw_name).strip()
-          
-          # 4. Fallback to username if the sanitized string is empty
-          real_name = safe_name if safe_name else user
+          if re.search(r'[^\w\s.\-]', raw_name):
+              with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
+                  f.write("ERROR_MSG=❌ Security Violation: The provided name contains restricted characters. Only alphanumeric characters, spaces, dots, and hyphens are permitted.\n")
+              sys.exit(1)
+              
+          real_name = raw_name if raw_name else user
           # -------------------------------------------
 
           # --- Anti-Spam & Cooldown System (24 Hours) ---
