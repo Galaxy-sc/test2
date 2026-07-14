@@ -1,4 +1,4 @@
-name: Generate Secure Certificate (IssueOps)
+name: Generate Certificate
 
 on:
   issues:
@@ -43,12 +43,18 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           import urllib.request, json, os, sys, re, time
-          
+
           user = os.environ['USER_INPUT']
           user_id = os.environ['USER_ID']
           issue_body = os.environ['ISSUE_BODY']
           gh_token = os.environ['GH_TOKEN']
-              
+
+          # Org whose repos count toward the certificate. Kept as a constant
+          # (matches the original hardcoded 'OWASP' filter) rather than
+          # REPO_OWNER, since REPO_OWNER is just wherever this workflow
+          # happens to be running from.
+          TARGET_ORG = 'OWASP'
+
           name_match = re.search(r'FullName:\s*(.+)', issue_body)
           real_name = name_match.group(1).strip() if name_match else user
 
@@ -61,7 +67,7 @@ jobs:
                       old_data = json.load(f)
                       last_issued = old_data.get("last_issued", 0)
                       time_passed = time.time() - last_issued
-                      
+
                       if time_passed < cooldown_seconds:
                           hours_left = int((cooldown_seconds - time_passed) / 3600)
                           mins_left = int(((cooldown_seconds - time_passed) % 3600) / 60)
@@ -72,7 +78,7 @@ jobs:
                   except:
                       pass
           # -------------------------------------------------
-          
+
           headers = {
               'Authorization': f'Bearer {gh_token}',
               'Content-Type': 'application/json',
@@ -84,44 +90,58 @@ jobs:
               req = urllib.request.Request('https://api.github.com/graphql', data=payload, headers=headers)
               try:
                   with urllib.request.urlopen(req) as response:
-                      return json.loads(response.read().decode())
+                      result = json.loads(response.read().decode())
               except Exception as e:
                   print(f"::error::GraphQL Error: {e}")
                   with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                      f.write(f"ERROR_MSG=❌ Connection to the GraphQL server was lost. Please verify that the PAT token is set.\n")
+                      f.write("ERROR_MSG=❌ Connection to the GraphQL server was lost. Please verify that the PAT token is set.\n")
                   sys.exit(1)
+              if 'errors' in result:
+                  print(f"::warning::GraphQL returned errors: {result['errors']}")
+              return result
 
           # --- 2. Get User's GraphQL Node ID ---
           id_query = """query($login: String!) { user(login: $login) { id } }"""
           id_res = run_graphql(id_query, {"login": user})
-          
+
           if not id_res or 'errors' in id_res or not id_res.get('data', {}).get('user'):
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
                   f.write(f"ERROR_MSG=❌ User @{user} was not found in GitHub's GraphQL system.\n")
               sys.exit(1)
-              
+
           graphql_author_id = id_res['data']['user']['id']
 
-          # --- 3. Main Query for Data Extraction ---
-          main_query = """
-          query($login: String!, $authorId: ID!) {
-            rateLimit { cost remaining limit }
+          # --- 3a. Primary-authored commits, FULLY PAGINATED ---
+          # FIX 1: the original query used first:100 with no cursor on both
+          # the repo list and each repo's commit history, silently
+          # truncating both for active contributors / repos.
+
+          REPOS_PAGE_QUERY = """
+          query($login: String!, $cursor: String) {
             user(login: $login) {
-              repositoriesContributedTo(first: 100, contributionTypes: [COMMIT]) {
+              repositoriesContributedTo(first: 100, after: $cursor, contributionTypes: [COMMIT]) {
+                pageInfo { hasNextPage endCursor }
                 edges {
                   node {
                     name
                     owner { login }
-                    defaultBranchRef {
-                      target {
-                        ... on Commit {
-                          history(author: { id: $authorId }, first: 100) {
-                            edges {
-                              node { oid message additions deletions committedDate }
-                            }
-                          }
-                        }
-                      }
+                    defaultBranchRef { target { ... on Commit { oid } } }
+                  }
+                }
+              }
+            }
+          }
+          """
+
+          COMMIT_HISTORY_QUERY = """
+          query($owner: String!, $name: String!, $authorId: ID!, $cursor: String) {
+            repository(owner: $owner, name: $name) {
+              defaultBranchRef {
+                target {
+                  ... on Commit {
+                    history(author: { id: $authorId }, first: 100, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      edges { node { oid additions deletions committedDate } }
                     }
                   }
                 }
@@ -129,79 +149,178 @@ jobs:
             }
           }
           """
-          
-          print(f"[*] Fetching deep stats for @{user} via GraphQL...")
-          data_res = run_graphql(main_query, {"login": user, "authorId": graphql_author_id})
-          
-          limit_info = data_res.get('data', {}).get('rateLimit', {})
-          print(f"💸 Query Cost: {limit_info.get('cost')} | 🔋 Remaining: {limit_info.get('remaining')}/{limit_info.get('limit')}")
 
-          contributed_repos = data_res.get('data', {}).get('user', {}).get('repositoriesContributedTo', {}).get('edges', [])
-          
+          def list_contributed_repo_names(login, org):
+              names = []
+              cursor = None
+              while True:
+                  res = run_graphql(REPOS_PAGE_QUERY, {"login": login, "cursor": cursor})
+                  block = res.get('data', {}).get('user', {}).get('repositoriesContributedTo', {})
+                  for edge in block.get('edges', []):
+                      node = edge['node']
+                      if node['owner']['login'].upper() == org.upper() and node.get('defaultBranchRef'):
+                          names.append(node['name'])
+                  page_info = block.get('pageInfo', {})
+                  if page_info.get('hasNextPage'):
+                      cursor = page_info.get('endCursor')
+                  else:
+                      break
+              return names
+
+          def all_authored_commits(owner, name, author_id):
+              commits = []
+              cursor = None
+              while True:
+                  res = run_graphql(COMMIT_HISTORY_QUERY, {
+                      "owner": owner, "name": name, "authorId": author_id, "cursor": cursor
+                  })
+                  branch = res.get('data', {}).get('repository', {}).get('defaultBranchRef')
+                  if not branch:
+                      break
+                  history = branch['target']['history']
+                  for edge in history.get('edges', []):
+                      commits.append(edge['node'])
+                  page_info = history.get('pageInfo', {})
+                  if page_info.get('hasNextPage'):
+                      cursor = page_info.get('endCursor')
+                  else:
+                      break
+              return commits
+
+          print(f"[*] Fetching contributed {TARGET_ORG} repos for @{user}...")
+          repo_names = list_contributed_repo_names(user, TARGET_ORG)
+
+          seen_oids = set()
+          repo_stats = {}
+          commit_logs = []
           total_commits = 0
           total_added = 0
           total_removed = 0
-          repo_stats = {}
-          commit_logs = []
           first_commit_date = None
 
-          for repo_edge in contributed_repos:
-              repo_node = repo_edge.get('node', {})
-              repo_owner = repo_node.get('owner', {}).get('login', '')
-              repo_name = f"{repo_owner}/{repo_node.get('name', '')}"
-              
-              if repo_owner.upper() != 'OWASP':
-                  continue
-                  
-              branch_ref = repo_node.get('defaultBranchRef')
-              if not branch_ref: continue
-                  
-              commit_history = branch_ref.get('target', {}).get('history', {}).get('edges', [])
-              if not commit_history: continue
+          def record_commit(repo_full, oid, additions, deletions, committed_date, note=""):
+              global total_commits, total_added, total_removed, first_commit_date
+              if oid in seen_oids:
+                  return
+              seen_oids.add(oid)
+              if repo_full not in repo_stats:
+                  repo_stats[repo_full] = {'commits': 0, 'added': 0, 'removed': 0}
+              repo_stats[repo_full]['commits'] += 1
+              repo_stats[repo_full]['added'] += additions
+              repo_stats[repo_full]['removed'] += deletions
+              total_commits += 1
+              total_added += additions
+              total_removed += deletions
+              if not first_commit_date or committed_date < first_commit_date:
+                  first_commit_date = committed_date
+              sha = oid[:7]
+              commit_url = f"https://github.com/{repo_full}/commit/{oid}"
+              suffix = f" {note}" if note else ""
+              commit_logs.append(f"- [{sha}]({commit_url}) in **{repo_full}**: +{additions} / -{deletions} lines{suffix}")
 
-              if repo_name not in repo_stats:
-                  repo_stats[repo_name] = {'commits': 0, 'added': 0, 'removed': 0}
+          for name in repo_names:
+              repo_full = f"{TARGET_ORG}/{name}"
+              print(f"[*] Fetching authored commits in {repo_full}...")
+              for c in all_authored_commits(TARGET_ORG, name, graphql_author_id):
+                  record_commit(repo_full, c['oid'], c['additions'], c['deletions'], c['committedDate'])
 
-              for commit_edge in commit_history:
-                  commit = commit_edge['node']
-                  sha = commit['oid'][:7]
-                  added = commit['additions']
-                  removed = commit['deletions']
-                  c_date = commit['committedDate'] # Format: 2023-01-01T12:00:00Z
-                  
-                  # Compare dates as strings (ISO 8601 format allows string comparison) to find the oldest
-                  if not first_commit_date or c_date < first_commit_date:
-                      first_commit_date = c_date
-                  
-                  total_commits += 1
-                  total_added += added
-                  total_removed += removed
-                  
-                  repo_stats[repo_name]['commits'] += 1
-                  repo_stats[repo_name]['added'] += added
-                  repo_stats[repo_name]['removed'] += removed
-                  
-                  commit_url = f"https://github.com/{repo_name}/commit/{commit['oid']}"
-                  commit_logs.append(f"- [{sha}]({commit_url}) in **{repo_name}**: +{added} / -{removed} lines")
+          # --- 3b. Co-authored commits from squash-merged PRs ---
+          # FIX 2: history(author:{id}) only matches the PRIMARY git author.
+          # If someone pushes a commit onto another person's PR branch and
+          # that PR gets squash-merged, GitHub folds it into a single commit
+          # authored by the PR owner, crediting the contributor only via a
+          # "Co-authored-by:" trailer -- exposed in GraphQL as Commit.authors,
+          # which the original query never read. We find these by searching
+          # merged PRs the user was involved in, then checking each PR's
+          # merge commit for a co-author match.
+
+          SEARCH_PR_QUERY = """
+          query($q: String!, $cursor: String) {
+            search(query: $q, type: ISSUE, first: 50, after: $cursor) {
+              pageInfo { hasNextPage endCursor }
+              nodes {
+                ... on PullRequest {
+                  number
+                  repository { name owner { login } }
+                  mergeCommit {
+                    oid
+                    additions
+                    deletions
+                    committedDate
+                    author { user { id } }
+                    authors(first: 10) { nodes { user { id } } }
+                  }
+                }
+              }
+            }
+          }
+          """
+
+          def find_coauthored_squash_commits(org, login, author_id):
+              search_q = f'org:{org} is:pr is:merged involves:{login}'
+              found = []
+              cursor = None
+              while True:
+                  res = run_graphql(SEARCH_PR_QUERY, {"q": search_q, "cursor": cursor})
+                  block = res.get('data', {}).get('search', {})
+                  for node in block.get('nodes', []) or []:
+                      if not node or 'mergeCommit' not in node:
+                          continue
+                      mc = node.get('mergeCommit')
+                      if not mc:
+                          continue
+                      author_block = mc.get('author') or {}
+                      primary_user = author_block.get('user') or {}
+                      primary_id = primary_user.get('id')
+                      co_ids = [
+                          (n.get('user') or {}).get('id')
+                          for n in mc.get('authors', {}).get('nodes', [])
+                      ]
+                      if primary_id == author_id:
+                          continue  # already counted in 3a as primary author
+                      if author_id in co_ids:
+                          repo_owner = node['repository']['owner']['login']
+                          if repo_owner.upper() != org.upper():
+                              continue
+                          found.append({
+                              'oid': mc['oid'],
+                              'additions': mc['additions'],
+                              'deletions': mc['deletions'],
+                              'committedDate': mc['committedDate'],
+                              'repo': f"{repo_owner}/{node['repository']['name']}",
+                              'pr_number': node['number'],
+                          })
+                  page_info = block.get('pageInfo', {})
+                  if page_info.get('hasNextPage'):
+                      cursor = page_info.get('endCursor')
+                  else:
+                      break
+              return found
+
+          print(f"[*] Searching for squash-merged PRs where @{user} contributed as a co-author...")
+          for c in find_coauthored_squash_commits(TARGET_ORG, user, graphql_author_id):
+              record_commit(
+                  c['repo'], c['oid'], c['additions'], c['deletions'], c['committedDate'],
+                  note=f"(co-authored via PR #{c['pr_number']})"
+              )
 
           total_projects = len(repo_stats)
 
           if total_commits == 0:
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write(f"ERROR_MSG=User @{user} has no verified commits in the default branch of public OWASP projects.\n")
+                  f.write(f"ERROR_MSG=User @{user} has no verified commits in the default branch of public {TARGET_ORG} projects.\n")
               sys.exit(1)
 
-          # Extract just the Date part (YYYY-MM-DD) from ISO format
           first_commit_display = first_commit_date.split('T')[0] if first_commit_date else "N/A"
 
           # --- 4. Generate Final Report ---
           report = "#### 📊 Transparent Telemetry System Factor (Powered by GraphQL)\n"
           report += f"> **Summary:** {total_commits} commits across {total_projects} projects ⟵ (+{total_added} lines added / -{total_removed} lines removed)\n\n"
-          
+
           report += "**Breakdown of Involved Projects (Repositories):**\n"
           for repo, stats in repo_stats.items():
               report += f"- **[{repo}](https://github.com/{repo})**: {stats['commits']} commits ⟵ (+{stats['added']} / -{stats['removed']})\n"
-          
+
           report += "\n<details>\n"
           report += "<summary><b>🔍 View Individual Commit Details (Click to Expand)</b></summary>\n\n"
           report += "\n".join(commit_logs)
@@ -211,31 +330,31 @@ jobs:
           if total_commits >= 50: tier = "Gold"
           elif total_commits >= 10: tier = "Silver"
           else: tier = "Bronze"
-              
+
           cert_id = user_id
-          
+
           payload = {
               "id": cert_id,
-              "user": user, 
-              "real_name": real_name, 
-              "tier": tier, 
+              "user": user,
+              "real_name": real_name,
+              "tier": tier,
               "last_issued": int(time.time()),
               "stats": {
                   "first_commit_date": first_commit_display,
                   "merged_commits": str(total_commits),
                   "project_count": str(total_projects),
-                  "lines_added": str(total_added), 
+                  "lines_added": str(total_added),
                   "lines_removed": str(total_removed)
               }
           }
-          
+
           os.makedirs("db_branch/certs", exist_ok=True)
           file_path = f"db_branch/certs/{cert_id}.json"
           with open(file_path, "w", encoding="utf-8") as f:
               json.dump(payload, f, ensure_ascii=False, indent=2)
-          
+
           final_url = f"https://{os.environ['REPO_OWNER']}.github.io/{os.environ['REPO_NAME']}/?id={cert_id}"
-          
+
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
               f.write(f"CERT_URL={final_url}\n")
               f.write(f"TIER={tier}\n")
