@@ -10,7 +10,6 @@ concurrency:
 
 jobs:
   build-cert:
-    # Workflow will only trigger if the issue title contains "Cert Request"
     if: contains(github.event.issue.title, 'Cert Request')
     runs-on: ubuntu-latest
     permissions:
@@ -42,7 +41,7 @@ jobs:
           REPO_NAME: ${{ github.event.repository.name }}
           GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
-          import urllib.request, json, os, sys, re, time
+          import urllib.request, json, os, sys, re, time, math
           
           user = os.environ['USER_INPUT']
           user_id = os.environ['USER_ID']
@@ -72,7 +71,6 @@ jobs:
                           sys.exit(1)
                   except:
                       pass
-          # -------------------------------------------------
           
           headers = {
               'Authorization': f'Bearer {gh_token}',
@@ -220,7 +218,7 @@ jobs:
                       'type': 'PR'
                   }
 
-          # --- 4. Generate Final Data & Report ---
+          # --- 4. Process Gathered Data ---
           total_commits = len(unique_commits)
           
           if total_commits == 0:
@@ -234,10 +232,45 @@ jobs:
           first_commit_date = min(c['date'] for c in unique_commits.values())
           first_commit_display = first_commit_date.split('T')[0] if first_commit_date else "N/A"
 
+          # --- 5. Algorithm & Tier Calculation ---
+          P99_ADD = 290764.32000000024
+          P99_DEL = 130211.56000000004
+          P99_CMT = 536.5200000000004
+          OUTLIER_UPPER = 17.980652793952775
+
+          SILVER_THRESHOLD = 0.000818
+          GOLD_THRESHOLD = 0.006063
+
+          raw_total = total_added + total_removed
+          
+          if raw_total == 0:
+              with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
+                  f.write(f"ERROR_MSG=User @{user} has no recorded line contributions to receive a certificate.\n")
+              sys.exit(1)
+              
+          log_raw = math.log1p(raw_total)
+          
+          if log_raw > OUTLIER_UPPER:
+              tier = "Gold"
+              final_score = "Exceptional"
+          else:
+              add_norm = min(total_added / P99_ADD, 1.0) if P99_ADD > 0 else 0
+              del_norm = min(total_removed / P99_DEL, 1.0) if P99_DEL > 0 else 0
+              cmt_norm = min(total_commits / P99_CMT, 1.0) if P99_CMT > 0 else 0
+              
+              score = (add_norm * 0.50) + (del_norm * 0.40) + (cmt_norm * 0.10)
+              final_score = f"{score:.6f}"
+              
+              if score >= GOLD_THRESHOLD:
+                  tier = "Gold"
+              elif score >= SILVER_THRESHOLD:
+                  tier = "Silver"
+              else:
+                  tier = "Bronze"
+
+          # --- 6. Generate Report ---
           repo_stats = {}
           commit_logs = []
-
-          # Sort logs by date for better presentation
           sorted_commits = sorted(unique_commits.items(), key=lambda x: x[1]['date'])
           
           for sha, data in sorted_commits:
@@ -255,7 +288,8 @@ jobs:
           total_projects = len(repo_stats)
 
           report = "#### 📊 Transparent Telemetry System Factor (Powered by GraphQL)\n"
-          report += f"> **Summary:** {total_commits} valid commits across {total_projects} projects ⟵ (+{total_added} lines added / -{total_removed} lines removed)\n\n"
+          report += f"> **Summary:** {total_commits} valid commits across {total_projects} projects ⟵ (+{total_added} lines added / -{total_removed} lines removed)\n"
+          report += f"> **Calculated Contribution Score:** `{final_score}`\n\n"
           
           report += "**Breakdown of Involved Projects (Repositories):**\n"
           for repo, stats in repo_stats.items():
@@ -266,18 +300,15 @@ jobs:
           report += "\n".join(commit_logs)
           report += "\n</details>\n"
 
-          # --- 5. Save to Database ---
-          if total_commits >= 50: tier = "Gold"
-          elif total_commits >= 10: tier = "Silver"
-          else: tier = "Bronze"
-              
+          # --- 7. Save to Database ---
           cert_id = user_id
           
           payload = {
               "id": cert_id,
               "user": user, 
               "real_name": real_name, 
-              "tier": tier, 
+              "tier": tier,
+              "score": final_score,
               "last_issued": int(time.time()),
               "stats": {
                   "first_commit_date": first_commit_display,
@@ -327,7 +358,7 @@ jobs:
           **Registered Name:** ${{ env.REAL_NAME }}
           **Unique ID:** \`${{ env.CERT_ID }}\`
           **First Contribution:** ${{ env.FIRST_COMMIT }}
-          **Tier:** ${{ env.TIER }}
+          **Achieved Tier:** ${{ env.TIER }}
           
           🔗 [**>> Click Here to View and Download Certificate <<**](${{ env.CERT_URL }})
           
