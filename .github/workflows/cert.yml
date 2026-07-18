@@ -362,14 +362,48 @@ jobs:
             cd db_branch
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            
+
             mkdir -p attempts certs
             git add -A attempts/ certs/ 2>/dev/null || true
-            
-            if ! git diff --staged --quiet; then
-              git commit -m "db(sys): update records for @${{ github.actor }} [skip ci]"
-              git pull --rebase origin data || true
-              git push origin data || true
+
+            if git diff --staged --quiet; then
+              echo "[*] No changes to commit."
+              exit 0
+            fi
+
+            git commit -m "db(sys): update records for @${{ github.actor }} [skip ci]"
+
+            max_attempts=5
+            attempt=1
+            pushed=false
+
+            while [ $attempt -le $max_attempts ]; do
+              echo "[*] Push attempt $attempt/$max_attempts..."
+
+              if git push origin data; then
+                pushed=true
+                break
+              fi
+
+              echo "[*] Push rejected, fetching + rebasing onto latest data branch..."
+              git fetch origin data
+
+              if ! git rebase origin/data; then
+                echo "::error::Rebase conflict while saving certificate record."
+                git rebase --abort
+                break
+              fi
+
+              sleep $((RANDOM % 5 + 1))
+              attempt=$((attempt + 1))
+            done
+
+            if [ "$pushed" = false ]; then
+              echo "::error::Failed to push certificate record to data branch after $max_attempts attempts."
+              if ! grep -q '^ERROR_MSG=' "$GITHUB_ENV" 2>/dev/null; then
+                echo "ERROR_MSG=⚠️ Your certificate was calculated, but we hit a temporary conflict saving the record. Please open a new 'Cert Request' issue to try again." >> "$GITHUB_ENV"
+              fi
+              exit 1
             fi
           fi
 
