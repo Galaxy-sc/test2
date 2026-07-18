@@ -58,13 +58,11 @@ jobs:
           
           last_time = 0
           
-          # Check if user already has a cert
           if os.path.exists(cert_path):
               with open(cert_path, "r", encoding="utf-8") as f:
                   try: last_time = max(last_time, json.load(f).get("last_issued", 0))
                   except: pass
                   
-          # Check if user recently failed (0 commits)
           if os.path.exists(attempt_path):
               with open(attempt_path, "r", encoding="utf-8") as f:
                   try: last_time = max(last_time, json.load(f).get("last_attempt", 0))
@@ -77,7 +75,7 @@ jobs:
               error_msg = f"⏳ **System Limit:** You have recently requested a check. Please try again in {hours_left} hours and {mins_left} minutes."
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
                   env_file.write(f"ERROR_MSG={error_msg}\n")
-              sys.exit(1) # Stops execution immediately, creates NO files.
+              sys.exit(1)
 
           # --- Security Policy: Input Validation ---
           name_match = re.search(r'FullName:\s*([^\r\n]+)', issue_body)
@@ -95,7 +93,7 @@ jobs:
               
           real_name = raw_name if raw_name else user
           # -------------------------------------------
-          
+
           headers = {
               'Authorization': f'Bearer {gh_token}',
               'Content-Type': 'application/json',
@@ -130,57 +128,122 @@ jobs:
           graphql_author_id = id_res['data']['user']['id']
           unique_commits = {}
 
-          # --- Phase 1 & 2: GraphQL Logic ---
-          print("[*] Fetching direct commits...")
+          # --- Phase 1: Direct Commits in Default Branch ---
+          print("[*] Phase 1: Fetching direct default branch commits...")
           main_query = """
           query($login: String!, $authorId: ID!) {
             user(login: $login) {
               repositoriesContributedTo(first: 100, contributionTypes: [COMMIT]) {
-                edges { node { name owner { login } defaultBranchRef { target { ... on Commit { history(author: { id: $authorId }, first: 100) { edges { node { oid message additions deletions committedDate } } } } } } } } }
+                edges {
+                  node {
+                    name
+                    owner { login }
+                    defaultBranchRef {
+                      target {
+                        ... on Commit {
+                          history(author: { id: $authorId }, first: 100) {
+                            edges {
+                              node { oid message additions deletions committedDate }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
           """
           data_res = run_graphql(main_query, {"login": user, "authorId": graphql_author_id})
           contributed_repos = data_res.get('data', {}).get('user', {}).get('repositoriesContributedTo', {}).get('edges', [])
+          
           for repo_edge in contributed_repos:
               repo_node = repo_edge.get('node', {})
               repo_owner = repo_node.get('owner', {}).get('login', '')
               repo_name = f"{repo_owner}/{repo_node.get('name', '')}"
+              
               if repo_owner.upper() != ORG_NAME: continue
+                  
               branch_ref = repo_node.get('defaultBranchRef')
               if not branch_ref: continue
+                  
               commit_history = branch_ref.get('target', {}).get('history', {}).get('edges', [])
               for commit_edge in commit_history:
                   c = commit_edge['node']
-                  unique_commits[c['oid']] = {'repo': repo_name, 'added': c['additions'], 'removed': c['deletions'], 'date': c['committedDate']}
+                  sha = c['oid']
+                  unique_commits[sha] = {
+                      'repo': repo_name,
+                      'added': c['additions'],
+                      'removed': c['deletions'],
+                      'date': c['committedDate'],
+                      'type': 'Direct'
+                  }
 
-          print("[*] Fetching co-authored PRs...")
+          # --- Phase 2: Collaborative PRs (Squashed / Co-authored) ---
+          print("[*] Phase 2: Fetching valid PR merge commits (Co-authored)...")
           pr_query = """
           query($searchQuery: String!) {
-            search(query: $searchQuery, type: ISSUE, first: 100) { edges { node { ... on PullRequest { repository { nameWithOwner owner { login } } mergeCommit { oid additions deletions committedDate authors(first: 10) { edges { node { user { login } } } } } } } } }
+            search(query: $searchQuery, type: ISSUE, first: 100) {
+              edges {
+                node {
+                  ... on PullRequest {
+                    repository { nameWithOwner owner { login } }
+                    mergeCommit {
+                      oid additions deletions committedDate
+                      authors(first: 10) {
+                        edges {
+                          node {
+                            user { login }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
           """
           search_str = f"is:pr is:merged involves:{user} org:{ORG_NAME}"
           pr_res = run_graphql(pr_query, {"searchQuery": search_str})
+          
           pr_edges = pr_res.get('data', {}).get('search', {}).get('edges', [])
           for pr_edge in pr_edges:
               pr_node = pr_edge.get('node', {})
               if not pr_node or not pr_node.get('repository'): continue
+              
               repo_owner = pr_node['repository']['owner']['login']
               if repo_owner.upper() != ORG_NAME: continue
+              
               repo_name = pr_node['repository']['nameWithOwner']
               merge_commit = pr_node.get('mergeCommit')
+              
               if not merge_commit: continue
+                  
               sha = merge_commit['oid']
-              is_author = any(a_edge.get('node', {}).get('user', {}).get('login', '').lower() == user.lower() for a_edge in merge_commit.get('authors', {}).get('edges', []))
+              
+              is_author = False
+              authors_edges = merge_commit.get('authors', {}).get('edges', [])
+              for a_edge in authors_edges:
+                  a_user = a_edge.get('node', {}).get('user', {})
+                  if a_user and a_user.get('login', '').lower() == user.lower():
+                      is_author = True
+                      break
+                      
               if is_author and sha not in unique_commits:
-                  unique_commits[sha] = {'repo': repo_name, 'added': merge_commit['additions'], 'removed': merge_commit['deletions'], 'date': merge_commit['committedDate']}
+                  unique_commits[sha] = {
+                      'repo': repo_name,
+                      'added': merge_commit['additions'],
+                      'removed': merge_commit['deletions'],
+                      'date': merge_commit['committedDate'],
+                      'type': 'PR'
+                  }
 
           # --- Process Gathered Data ---
           total_commits = len(unique_commits)
           
-          # IF USER HAS 0 COMMITS -> Put them in the 'attempts' file cooldown
+          # IF USER HAS 0 COMMITS -> Put them in the 'attempts' cooldown file
           if total_commits == 0:
               os.makedirs("db_branch/attempts", exist_ok=True)
               with open(attempt_path, "w", encoding="utf-8") as f:
@@ -190,7 +253,6 @@ jobs:
                   f.write(f"ERROR_MSG=User @{user} has no verified commits or co-authored contributions in the default branch of public OWASP projects.\n")
               sys.exit(1)
 
-          # --- Success Logic (For users with commits) ---
           total_added = sum(c['added'] for c in unique_commits.values())
           total_removed = sum(c['removed'] for c in unique_commits.values())
           
@@ -203,15 +265,17 @@ jobs:
           first_commit_date = min(c['date'] for c in unique_commits.values())
           first_commit_display = first_commit_date.split('T')[0] if first_commit_date else "N/A"
 
-          # Tier Calculation
+          # --- Algorithm & Tier Calculation ---
           P99_ADD = 290764.32000000024
           P99_DEL = 130211.56000000004
           P99_CMT = 536.5200000000004
           OUTLIER_UPPER = 17.980652793952775
+
           SILVER_THRESHOLD = 0.000818
           GOLD_THRESHOLD = 0.006063
 
           log_raw = math.log1p(raw_total)
+          
           if log_raw > OUTLIER_UPPER:
               tier = "Gold"
               final_score = "Exceptional"
@@ -219,48 +283,76 @@ jobs:
               add_norm = min(total_added / P99_ADD, 1.0) if P99_ADD > 0 else 0
               del_norm = min(total_removed / P99_DEL, 1.0) if P99_DEL > 0 else 0
               cmt_norm = min(total_commits / P99_CMT, 1.0) if P99_CMT > 0 else 0
+              
               score = (add_norm * 0.50) + (del_norm * 0.40) + (cmt_norm * 0.10)
               final_score = f"{score:.6f}"
+              
               if score >= GOLD_THRESHOLD: tier = "Gold"
               elif score >= SILVER_THRESHOLD: tier = "Silver"
               else: tier = "Bronze"
 
+          # --- Generate Summary Report ---
           repo_stats = {}
-          for data in unique_commits.values():
+          for sha, data in unique_commits.items():
               r_name = data['repo']
-              if r_name not in repo_stats: repo_stats[r_name] = {'commits': 0, 'added': 0, 'removed': 0}
+              if r_name not in repo_stats:
+                  repo_stats[r_name] = {'commits': 0, 'added': 0, 'removed': 0}
+                  
               repo_stats[r_name]['commits'] += 1
               repo_stats[r_name]['added'] += data['added']
               repo_stats[r_name]['removed'] += data['removed']
+
           total_projects = len(repo_stats)
 
           report = "#### 📊 Contribution Summary\n"
           report += f"> **Total:** {total_commits} valid commits across {total_projects} projects\n"
           report += f"> **Impact:** +{total_added} lines added / -{total_removed} lines removed\n"
           report += f"> **Calculated Score:** `{final_score}`\n\n"
+          
           report += "**Breakdown by Project:**\n"
           for repo, stats in repo_stats.items():
               report += f"- **[{repo}](https://github.com/{repo})**: {stats['commits']} commits (+{stats['added']} / -{stats['removed']})\n"
 
-          # Clean up attempt file if it exists, since they are getting a cert now
+          # Clean up attempt file since the user was successful
           if os.path.exists(attempt_path):
               try: os.remove(attempt_path)
               except: pass
 
+          # --- Save to Database ---
           cert_id = user_id
+          
           payload = {
-              "id": cert_id, "user": user, "real_name": real_name, "tier": tier, "score": final_score, "last_issued": int(now),
-              "stats": {"first_commit_date": first_commit_display, "merged_commits": str(total_commits), "project_count": str(total_projects), "lines_added": str(total_added), "lines_removed": str(total_removed)}
+              "id": cert_id,
+              "user": user, 
+              "real_name": real_name, 
+              "tier": tier,
+              "score": final_score,
+              "last_issued": int(now),
+              "stats": {
+                  "first_commit_date": first_commit_display,
+                  "merged_commits": str(total_commits),
+                  "project_count": str(total_projects),
+                  "lines_added": str(total_added), 
+                  "lines_removed": str(total_removed)
+              }
           }
           
           os.makedirs("db_branch/certs", exist_ok=True)
-          with open(cert_path, "w", encoding="utf-8") as f:
+          file_path = f"db_branch/certs/{cert_id}.json"
+          with open(file_path, "w", encoding="utf-8") as f:
               json.dump(payload, f, ensure_ascii=False, indent=2)
           
           final_url = f"https://{os.environ['REPO_OWNER']}.github.io/{os.environ['REPO_NAME']}/?id={cert_id}"
           
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-              f.write(f"CERT_URL={final_url}\nTIER={tier}\nREAL_NAME={real_name}\nCERT_ID={cert_id}\nFIRST_COMMIT={first_commit_display}\nLOG_REPORT<<EOF\n{report}\nEOF\n")
+              f.write(f"CERT_URL={final_url}\n")
+              f.write(f"TIER={tier}\n")
+              f.write(f"REAL_NAME={real_name}\n")
+              f.write(f"CERT_ID={cert_id}\n")
+              f.write(f"FIRST_COMMIT={first_commit_display}\n")
+              f.write("LOG_REPORT<<EOF\n")
+              f.write(report)
+              f.write("\nEOF\n")
         shell: python
 
       - name: Commit and Push Records to Data Branch
@@ -272,7 +364,6 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             
             mkdir -p attempts certs
-            # Use -A to track both new files and deletions
             git add -A attempts/ certs/ 2>/dev/null || true
             
             if ! git diff --staged --quiet; then
