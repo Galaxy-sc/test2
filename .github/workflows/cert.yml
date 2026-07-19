@@ -83,12 +83,12 @@ jobs:
 
           if len(raw_name) > 20:
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write("ERROR_MSG=❌ **Input Error:** The provided name exceeds the maximum limit of 20 characters. Please open a new issue with a shorter name.\n")
+                  f.write("ERROR_MSG=❌ **Input Error:** The provided name exceeds the maximum limit of 20 characters. Please re-enter a shorter name in the terminal workspace.\n")
               sys.exit(1)
               
           if re.search(r'[^\w\s.\-]', raw_name):
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write("ERROR_MSG=❌ **Input Error:** The provided name contains restricted characters. Only letters, numbers, spaces, dots, and hyphens are permitted. Please open a new issue with a valid name.\n")
+                  f.write("ERROR_MSG=❌ **Input Error:** The provided name contains restricted characters. Only letters, numbers, spaces, dots, and hyphens are permitted. Please re-enter a valid name.\n")
               sys.exit(1)
               
           real_name = raw_name if raw_name else user
@@ -112,7 +112,7 @@ jobs:
               except Exception as e:
                   print(f"::error::GraphQL Connection Error: {e}")
                   with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                      f.write(f"ERROR_MSG=❌ **System Error:** We encountered an internal issue while checking your contributions (API Connection Failed). Please tag a project maintainer so they can check the repository's token configuration.\n")
+                      f.write(f"ERROR_MSG=❌ **System Error:** We encountered an internal connection issue while checking your contributions (API Connection Failed). Please open a new issue to notify the project maintainers so they can investigate the repository's configuration.\n")
                   sys.exit(1)
 
           # --- Get User's GraphQL Node ID ---
@@ -122,7 +122,7 @@ jobs:
           
           if not id_res or 'errors' in id_res or not id_res.get('data', {}).get('user'):
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write(f"ERROR_MSG=❌ **User Not Found:** We could not locate the user @{user} in GitHub's system. Please ensure your username is correct.\n")
+                  f.write(f"ERROR_MSG=❌ **User Not Found:** The GitHub account @{user} could not be located. Please verify your handle and try again from the workspace.\n")
               sys.exit(1)
               
           graphql_author_id = id_res['data']['user']['id']
@@ -250,7 +250,7 @@ jobs:
                   json.dump({"last_attempt": now}, f)
               
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write(f"ERROR_MSG=⚠️ **Contribution Check:** We couldn't find any verified commits or co-authored contributions from @{user} in the default branch of public OWASP projects. If you believe this is an error, please ensure your contributions are merged.\n")
+                  f.write(f"ERROR_MSG=⚠️ **Contribution Check:** No verified commits or co-authored contributions from @{user} were found in the default branch of public OWASP projects. If you recently contributed, please ensure your contributions are successfully merged.\n")
               sys.exit(1)
 
           total_added = sum(c['added'] for c in unique_commits.values())
@@ -259,7 +259,7 @@ jobs:
           raw_total = total_added + total_removed
           if raw_total == 0:
               with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
-                  f.write(f"ERROR_MSG=⚠️ **Contribution Check:** It looks like @{user} has no recorded line contributions (lines added/removed) required to receive a certificate.\n")
+                  f.write(f"ERROR_MSG=⚠️ **Contribution Check:** It looks like @{user} has no recorded line contributions (lines added/removed) required to trigger a recognition score.\n")
               sys.exit(1)
 
           first_commit_date = min(c['date'] for c in unique_commits.values())
@@ -401,7 +401,7 @@ jobs:
             if [ "$pushed" = false ]; then
               echo "::error::Failed to push certificate record to data branch after $max_attempts attempts."
               if ! grep -q '^ERROR_MSG=' "$GITHUB_ENV" 2>/dev/null; then
-                echo "ERROR_MSG=⚠️ **System Notice:** Your certificate was generated successfully, but the server is currently too busy to save the record. Please open a new 'Cert Request' issue in a few minutes to try again." >> "$GITHUB_ENV"
+                echo "ERROR_MSG=⚠️ **System Notice:** Your certificate score was processed, but we encountered a temporary infrastructure update delay. Please rerun the operation inside your terminal workspace dashboard in a few minutes." >> "$GITHUB_ENV"
               fi
               exit 1
             fi
