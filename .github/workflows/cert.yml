@@ -31,6 +31,13 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Notify Processing Started
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment $ISSUE --body "⏳ The bot has started processing. Please wait a few moments and reload the page shortly. If this takes more than 30 minutes, please open an issue and report it to the maintainers."
+
       - name: GraphQL Deep Scan & Generate Report
         id: generate
         env:
@@ -350,7 +357,7 @@ jobs:
           with open(file_path, "w", encoding="utf-8") as f:
               json.dump(payload, f, ensure_ascii=False, indent=2)
           
-          final_url = f"https://{os.environ['REPO_OWNER']}.github.io/{os.environ['REPO_NAME']}/?id={cert_id}"
+          final_url = f"https://crt.owasp.org/?id={cert_id}"
           
           with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as f:
               f.write(f"CERT_URL={final_url}\n")
