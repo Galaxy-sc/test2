@@ -1,7 +1,7 @@
 {
   "name": "owasp-crt",
   "version": "1.0.0",
-  "homepage": "https://crt.owasp.org",
+  "homepage": "/test2/",
   "private": true,
   "type": "module",
   "scripts": {

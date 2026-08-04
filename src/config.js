@@ -5,6 +5,6 @@ export const APP_CONFIG = {
     branch: "data",
     workflowId: "generate-cert.yml"
   },
-  domain: "https://crt.owasp.org",
-  assetsPath: "/assets", 
+  domain: "https://galaxy-sc.github.io/test2",
+  assetsPath: "/test2/assets", 
 };
