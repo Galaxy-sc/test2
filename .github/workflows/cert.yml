@@ -7,9 +7,17 @@ on:
         description: 'Full Name'
         required: true
         type: string
+      github_user:
+        description: 'GitHub Username'
+        required: true
+        type: string
+      github_id:
+        description: 'GitHub User ID'
+        required: true
+        type: string
 
 concurrency:
-  group: cert-request-${{ github.actor }}
+  group: cert-request-${{ inputs.github_user }}
   cancel-in-progress: true
 
 jobs:
@@ -36,8 +44,8 @@ jobs:
       - name: GraphQL Deep Scan & Generate Report
         id: generate
         env:
-          USER_INPUT: ${{ github.actor }} 
-          USER_ID: ${{ github.actor_id }}
+          USER_INPUT: ${{ inputs.github_user }} 
+          USER_ID: ${{ inputs.github_id }}
           REAL_NAME_INPUT: ${{ inputs.full_name }}
           GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
@@ -49,7 +57,7 @@ jobs:
           gh_token = os.environ['GH_TOKEN']
           ORG_NAME = 'OWASP'
               
-          cooldown_seconds = 24 * 3600
+          cooldown_seconds = 0 # برای محیط پروداکشن اینو بزار روی 24 * 3600
           now = time.time()
           
           cert_path = f"db_branch/certs/{user_id}.json"
@@ -67,7 +75,7 @@ jobs:
                   try: last_time = max(last_time, json.load(f).get("last_attempt", 0))
                   except: pass
                   
-          if last_time > 0 and (now - last_time) < cooldown_seconds:
+          if cooldown_seconds > 0 and last_time > 0 and (now - last_time) < cooldown_seconds:
               print("::error::Rate Limit Exceeded. Cooldown active.")
               sys.exit(1)
 
@@ -321,7 +329,7 @@ jobs:
               exit 0
             fi
 
-            git commit -m "db(sys): update records for @${{ github.actor }} [skip ci]"
+            git commit -m "db(sys): update records for @${{ inputs.github_user }} [skip ci]"
 
             max_attempts=5
             attempt=1
