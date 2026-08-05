@@ -58,7 +58,7 @@ jobs:
           gh_token = os.environ.get('GH_TOKEN', '')
           ORG_NAME = 'OWASP'
               
-          cooldown_seconds = 0
+          cooldown_seconds = 86400 # لیمیت ۲۴ ساعته فعال شد
           
           cert_path = f"db_branch/certs/{user_id}.json"
           attempt_path = f"db_branch/attempts/{user_id}.json"
