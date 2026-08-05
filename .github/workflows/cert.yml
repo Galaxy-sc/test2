@@ -58,16 +58,21 @@ jobs:
           gh_token = os.environ.get('GH_TOKEN', '')
           ORG_NAME = 'OWASP'
               
-          cooldown_seconds = 86400 # لیمیت ۲۴ ساعته فعال شد
+          cooldown_seconds = 86400
           
           cert_path = f"db_branch/certs/{user_id}.json"
           attempt_path = f"db_branch/attempts/{user_id}.json"
 
-          def abort_with_error(msg):
+          def abort_with_error(msg, apply_limit=False):
               print(f"::error::{msg}")
               os.makedirs("db_branch/attempts", exist_ok=True)
               with open(attempt_path, "w", encoding="utf-8") as f:
-                  json.dump({"last_attempt": int(now), "status": "error", "message": str(msg)}, f)
+                  json.dump({
+                      "last_attempt": int(now), 
+                      "status": "error", 
+                      "message": str(msg),
+                      "apply_limit": apply_limit
+                  }, f)
               sys.exit(1)
               
           try:
@@ -79,11 +84,14 @@ jobs:
                       
               if os.path.exists(attempt_path):
                   with open(attempt_path, "r", encoding="utf-8") as f:
-                      try: last_time = max(last_time, json.load(f).get("last_attempt", 0))
+                      try: 
+                          att_data = json.load(f)
+                          if att_data.get("apply_limit") is True or "No verified commits" in att_data.get("message", ""):
+                              last_time = max(last_time, att_data.get("last_attempt", 0))
                       except: pass
                       
               if cooldown_seconds > 0 and last_time > 0 and (now - last_time) < cooldown_seconds:
-                  abort_with_error("Rate Limit Exceeded. Cooldown active.")
+                  abort_with_error("Rate Limit Exceeded. Cooldown active.", apply_limit=True)
 
               if len(raw_name) > 20:
                   abort_with_error("Input Error: Name exceeds 20 characters.")
@@ -234,7 +242,7 @@ jobs:
               total_commits = len(unique_commits)
               
               if total_commits == 0:
-                  abort_with_error("No verified commits found in OWASP repositories.")
+                  abort_with_error("No verified commits found in OWASP repositories.", apply_limit=True)
 
               total_added = sum(c['added'] for c in unique_commits.values())
               total_removed = sum(c['removed'] for c in unique_commits.values())
