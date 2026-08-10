@@ -56,13 +56,15 @@ jobs:
           user_id = os.environ.get('USER_ID', '')
           raw_name = os.environ.get('REAL_NAME_INPUT', '').strip()
           gh_token = os.environ.get('GH_TOKEN', '')
-          ORG_NAME = 'OWASP'
+          ORG_NAMES = ['OWASP', 'GenAI-Security-Project']
+          ORG_SET = {o.upper() for o in ORG_NAMES}
               
           cooldown_seconds = 86400
           
           cert_path = f"db_branch/certs/{user_id}.json"
           attempt_path = f"db_branch/attempts/{user_id}.json"
 
+          # Abort processing and record error state to the attempts log
           def abort_with_error(msg, apply_limit=False):
               print(f"::error::{msg}")
               os.makedirs("db_branch/attempts", exist_ok=True)
@@ -76,6 +78,7 @@ jobs:
               sys.exit(1)
               
           try:
+              # Enforce cooldown period based on last successful issuance or rate-limited attempts
               last_time = 0
               if os.path.exists(cert_path):
                   with open(cert_path, "r", encoding="utf-8") as f:
@@ -93,6 +96,7 @@ jobs:
               if cooldown_seconds > 0 and last_time > 0 and (now - last_time) < cooldown_seconds:
                   abort_with_error("Rate Limit Exceeded. Cooldown active.", apply_limit=True)
 
+              # Validate user-provided real name
               if len(raw_name) > 20:
                   abort_with_error("Input Error: Name exceeds 20 characters.")
                   
@@ -129,6 +133,7 @@ jobs:
               graphql_author_id = id_res['data']['user']['id']
               unique_commits = {}
 
+              # Phase 1: Retrieve commits authored directly on repository default branches
               print("[*] Phase 1: Fetching direct default branch commits...")
               main_query = """
               query($login: String!, $authorId: ID!) {
@@ -163,7 +168,7 @@ jobs:
                   repo_owner = repo_node.get('owner', {}).get('login', '')
                   repo_name = f"{repo_owner}/{repo_node.get('name', '')}"
                   
-                  if repo_owner.upper() != ORG_NAME: continue
+                  if repo_owner.upper() not in ORG_SET: continue
                       
                   branch_ref = repo_node.get('defaultBranchRef')
                   if not branch_ref: continue
@@ -180,6 +185,7 @@ jobs:
                           'type': 'Direct'
                       }
 
+              # Phase 2: Retrieve co-authored and PR merge commits within the organization
               print("[*] Phase 2: Fetching valid PR merge commits (Co-authored)...")
               pr_query = """
               query($searchQuery: String!) {
@@ -204,16 +210,17 @@ jobs:
                 }
               }
               """
-              search_str = f"is:pr is:merged involves:{user} org:{ORG_NAME}"
-              pr_res = run_graphql(pr_query, {"searchQuery": search_str})
-              
-              pr_edges = pr_res.get('data', {}).get('search', {}).get('edges', [])
+              pr_edges = []
+              for org in ORG_NAMES:
+                  search_str = f"is:pr is:merged involves:{user} org:{org}"
+                  pr_res = run_graphql(pr_query, {"searchQuery": search_str})
+                  pr_edges.extend(pr_res.get('data', {}).get('search', {}).get('edges', []))
               for pr_edge in pr_edges:
                   pr_node = pr_edge.get('node', {})
                   if not pr_node or not pr_node.get('repository'): continue
                   
                   repo_owner = pr_node['repository']['owner']['login']
-                  if repo_owner.upper() != ORG_NAME: continue
+                  if repo_owner.upper() not in ORG_SET: continue
                   
                   repo_name = pr_node['repository']['nameWithOwner']
                   merge_commit = pr_node.get('mergeCommit')
@@ -242,7 +249,7 @@ jobs:
               total_commits = len(unique_commits)
               
               if total_commits == 0:
-                  abort_with_error("No verified commits found in OWASP repositories.", apply_limit=True)
+                  abort_with_error("No verified commits found in the OWASP or GenAI Security Project repositories.", apply_limit=True)
 
               total_added = sum(c['added'] for c in unique_commits.values())
               total_removed = sum(c['removed'] for c in unique_commits.values())
@@ -252,6 +259,7 @@ jobs:
               first_commit_date = min(c['date'] for c in unique_commits.values())
               first_commit_display = first_commit_date.split('T')[0] if first_commit_date else "N/A"
 
+              # Normalization constants and scoring thresholds
               P99_ADD = 290764.32000000024
               P99_DEL = 130211.56000000004
               P99_CMT = 536.5200000000004
@@ -277,6 +285,7 @@ jobs:
                   elif score >= SILVER_THRESHOLD: tier = "Silver"
                   else: tier = "Bronze"
 
+              # Aggregate per-repository statistics
               repo_stats = {}
               for sha, data in unique_commits.items():
                   r_name = data['repo']
@@ -289,6 +298,7 @@ jobs:
 
               total_projects = len(repo_stats)
 
+              # Clean up any existing attempt logs upon success
               if os.path.exists(attempt_path):
                   try: os.remove(attempt_path)
                   except: pass
@@ -339,6 +349,7 @@ jobs:
 
             git commit -m "db(sys): update records for @${{ inputs.github_user }} [skip ci]"
 
+            # Retry push up to 5 times to handle concurrent pushes to the data branch
             max_attempts=5
             attempt=1
             pushed=false
