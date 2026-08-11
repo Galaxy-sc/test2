@@ -152,13 +152,6 @@ jobs:
               search_failed_due_to_restriction = False
               search_headers = headers.copy()
 
-              # Fallback core repositories to check if user is completely shadowbanned
-              ALWAYS_CHECK_REPOS = ["OWASP/AISVS", "OWASP/wstg"] 
-              for repo in ALWAYS_CHECK_REPOS:
-                  owner, name = repo.split("/")
-                  if owner.upper() in ORG_SET:
-                      target_repos_dict[repo] = {"owner": owner, "name": name}
-
               for org in ORG_NAMES:
                   print(f"[*] Searching for PRs by {user} in {org}...")
                   query_str = f"type:pr author:{user} org:{org}"
