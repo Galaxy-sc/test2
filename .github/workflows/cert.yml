@@ -134,198 +134,206 @@ jobs:
                       except Exception as e:
                           abort_with_error(f"GraphQL Connection Error: {e}")
 
-              print(f"[*] Fetching ID for user: {user}...")
-              id_query = """query($login: String!) { user(login: $login) { id } }"""
-              id_res = run_graphql(id_query, {"login": user})
+              print(f"[*] Fetching Graph Identity for user: {user}...")
+              user_query = """query($login: String!) { user(login: $login) { id name createdAt } }"""
+              user_res = run_graphql(user_query, {"login": user})
               
-              if not id_res or 'errors' in id_res or not id_res.get('data', {}).get('user'):
+              if not user_res or 'errors' in user_res or not user_res.get('data', {}).get('user'):
                   abort_with_error(f"User Not Found: {user}")
                   
-              graphql_author_id = id_res['data']['user']['id']
+              graphql_author_id = user_res['data']['user']['id']
+              github_real_name = user_res['data']['user'].get('name') or ''
+              created_at = user_res['data']['user']['createdAt']
+              
               unique_commits = {}
-
-              # ==========================================
-              # Phase 1a: 3-Layer Hybrid Architecture
-              # ==========================================
-              print("[*] Phase 1a: Hunting for repositories using 3-Layer Hybrid approach...")
               target_repos_dict = {}
-              search_failed_due_to_restriction = False
+              commits_to_fetch = set()
+
+              # ==========================================
+              # Phase 1: Deep REST Search (The Co-author & Squash Catcher)
+              # ==========================================
+              print("[*] Phase 1: Deep REST API Search (Catching Squashed, Co-authored, and Non-default branch commits)...")
               search_headers = headers.copy()
-
+              search_headers['Accept'] = 'application/vnd.github+json'
+              
+              queries_to_run = set()
               for org in ORG_NAMES:
-                  print(f"[*] Searching for PRs by {user} in {org}...")
-                  query_str = f"type:pr author:{user} org:{org}"
-                  encoded_query = urllib.parse.quote(query_str)
-                  search_url = f"https://api.github.com/search/issues?q={encoded_query}&per_page=100"
-                  
-                  req = urllib.request.Request(search_url, headers=search_headers)
-                  try:
-                      with urllib.request.urlopen(req) as response:
-                          result = json.loads(response.read().decode())
-                          for item in result.get('items', []):
-                              repo_url = item.get('repository_url', '')
-                              if not repo_url: continue
-                              
-                              parts = repo_url.split('/')
-                              repo_name = parts[-1]
-                              repo_owner = parts[-2]
-                              repo_key = f"{repo_owner}/{repo_name}"
-                              
-                              if repo_key not in target_repos_dict:
-                                  target_repos_dict[repo_key] = {"owner": repo_owner, "name": repo_name}
-                                  print(f"    - [HIT-PlanA] Found PR activity: {repo_key}")
-                                  
-                  except urllib.error.HTTPError as e:
-                      err_msg = ""
-                      try: err_msg = e.read().decode()
-                      except: pass
-                      
-                      if e.code == 422 and "users do not exist or you do not have permission" in err_msg:
-                          print(f"    [!] GitHub Shadowban detected for {user}.")
-                          search_failed_due_to_restriction = True
-                          break
-                      else:
-                          print(f"    [!] Search API HTTP Error for {org}: {e.code}")
-                  
-                  time.sleep(2)
+                  for qualifier in ['org', 'user']:
+                      queries_to_run.add(f"author:{user} {qualifier}:{org}")
+                      queries_to_run.add(f'"{user}" {qualifier}:{org}')
+                      if github_real_name:
+                          queries_to_run.add(f'"{github_real_name}" {qualifier}:{org}')
 
-              # Plan B (GraphQL) & Plan C (Events API)
-              if search_failed_due_to_restriction:
-                  print("[*] Initializing Plan B (GraphQL) and Plan C (Events API) to bypass restrictions...")
-                  
-                  # Plan B: GraphQL (May return empty due to contribution graph manipulation)
-                  repo_query = """
-                  query($login: String!) { user(login: $login) { repositoriesContributedTo(first: 100, contributionTypes: [COMMIT]) { edges { node { name owner { login } } } } } }
+              for q_str in queries_to_run:
+                  page = 1
+                  while page <= 4: # Max 4 pages to avoid rate limits
+                      encoded_query = urllib.parse.quote(q_str)
+                      search_url = f"https://api.github.com/search/commits?q={encoded_query}&per_page=100&page={page}"
+                      req = urllib.request.Request(search_url, headers=search_headers)
+                      try:
+                          with urllib.request.urlopen(req) as response:
+                              result = json.loads(response.read().decode())
+                              items = result.get('items', [])
+                              for item in items:
+                                  sha = item['sha']
+                                  repo_full = item['repository']['full_name']
+                                  owner, repo_name = repo_full.split('/')
+                                  if owner.upper() in ORG_SET:
+                                      commits_to_fetch.add((owner, repo_name, sha))
+                                      if repo_full not in target_repos_dict:
+                                          target_repos_dict[repo_full] = {"owner": owner, "name": repo_name}
+                                          print(f"    - [Deep-Search-Hit] Found repository: {repo_full}")
+                              if len(items) < 100:
+                                  break
+                              page += 1
+                              time.sleep(2)
+                      except urllib.error.HTTPError as e:
+                          if e.code == 403:
+                              time.sleep(5) # Wait out secondary rate limit
+                          break
+                      except Exception:
+                          break
+
+              # ==========================================
+              # Phase 2: Graph & Events (Catching Direct Commits)
+              # ==========================================
+              print("[*] Phase 2: Scanning Contribution Graph & Events API...")
+              start_year = int(created_at[:4])
+              current_year = int(time.strftime("%Y"))
+
+              for year in range(start_year, current_year + 1):
+                  from_date = f"{year}-01-01T00:00:00Z"
+                  to_date = f"{year}-12-31T23:59:59Z"
+                  graph_query = """
+                  query($login: String!, $from: DateTime!, $to: DateTime!) {
+                    user(login: $login) { contributionsCollection(from: $from, to: $to) {
+                        commitContributionsByRepository(maxRepositories: 100) { repository { nameWithOwner owner { login } name } }
+                    }}
+                  }
                   """
                   try:
-                      repo_res = run_graphql(repo_query, {"login": user})
-                      contributed_repos = repo_res.get('data', {}).get('user', {}).get('repositoriesContributedTo', {}).get('edges', [])
-                      for edge in contributed_repos:
-                          owner = edge['node']['owner']['login']
-                          name = edge['node']['name']
+                      graph_res = run_graphql(graph_query, {"login": user, "from": from_date, "to": to_date})
+                      collection = graph_res.get('data', {}).get('user', {}).get('contributionsCollection', {})
+                      for repo_contrib in collection.get('commitContributionsByRepository', []):
+                          repo_node = repo_contrib.get('repository')
+                          if not repo_node: continue
+                          owner = repo_node['owner']['login']
                           if owner.upper() in ORG_SET:
-                              repo_key = f"{owner}/{name}"
-                              target_repos_dict[repo_key] = {"owner": owner, "name": name}
-                              print(f"    - [HIT-PlanB] Found via GraphQL: {repo_key}")
-                  except Exception: pass
+                              repo_full = repo_node['nameWithOwner']
+                              if repo_full not in target_repos_dict:
+                                  target_repos_dict[repo_full] = {"owner": owner, "name": repo_node['name']}
+                  except: pass
 
-                  # Plan C: Raw Events API (Uncensored push/PR logs for the last 90 days)
-                  print(f"[*] Scanning Raw Events API for {user}...")
-                  events_url = f"https://api.github.com/users/{user}/events?per_page=100"
-                  req = urllib.request.Request(events_url, headers=search_headers)
-                  try:
-                      with urllib.request.urlopen(req) as response:
-                          events = json.loads(response.read().decode())
-                          for event in events:
-                              if event.get('type') in ['PushEvent', 'PullRequestEvent', 'IssuesEvent']:
-                                  repo_full = event['repo']['name']
-                                  owner, name = repo_full.split('/')
-                                  if owner.upper() in ORG_SET and repo_full not in target_repos_dict:
-                                      target_repos_dict[repo_full] = {"owner": owner, "name": name}
-                                      print(f"    - [HIT-PlanC] Found via Raw Events: {repo_full}")
-                  except Exception as e:
-                      print(f"    [!] Events API failed: {e}")
+              events_url = f"https://api.github.com/users/{user}/events?per_page=100"
+              try:
+                  req = urllib.request.Request(events_url, headers=headers)
+                  with urllib.request.urlopen(req) as response:
+                      for event in json.loads(response.read().decode()):
+                          if event.get('type') in ['PushEvent', 'PullRequestEvent', 'IssuesEvent']:
+                              repo_full = event['repo']['name']
+                              owner, name = repo_full.split('/')
+                              if owner.upper() in ORG_SET and repo_full not in target_repos_dict:
+                                  target_repos_dict[repo_full] = {"owner": owner, "name": name}
+              except: pass
 
-              target_repos = list(target_repos_dict.values())
-              print(f"[*] Found {len(target_repos)} target repositories dynamically.")
+              print(f"[*] Found {len(target_repos_dict)} total target repositories.")
 
-              # Phase 1b: Fetch commit history only for target repos (Default Branch)
-              print(f"[*] Phase 1b: Fetching commit history for target repos...")
+              # ==========================================
+              # Phase 3: Fetch Primary History
+              # ==========================================
+              print("[*] Phase 3: Fetching standard history from default branches...")
               commit_query = """
-              query($owner: String!, $name: String!, $authorId: ID!) {
+              query($owner: String!, $name: String!, $authorId: ID!, $cursor: String) {
                 repository(owner: $owner, name: $name) {
                   defaultBranchRef {
-                    target {
-                      ... on Commit {
-                        history(author: { id: $authorId }, first: 100) {
-                          edges {
-                            node { oid additions deletions committedDate }
-                          }
-                        }
-                      }
-                    }
+                    target { ... on Commit { history(author: { id: $authorId }, first: 100, after: $cursor) {
+                      pageInfo { hasNextPage endCursor }
+                      edges { node { oid additions deletions committedDate } }
+                    }}}
                   }
                 }
               }
               """
-              for repo in target_repos:
-                  c_res = run_graphql(commit_query, {"owner": repo['owner'], "name": repo['name'], "authorId": graphql_author_id})
-                  repo_node = c_res.get('data', {}).get('repository', {})
-                  if not repo_node: continue
-                  branch_ref = repo_node.get('defaultBranchRef')
-                  if not branch_ref: continue
+              for repo_full, repo in target_repos_dict.items():
+                  cursor = None
+                  while True:
+                      c_res = run_graphql(commit_query, {"owner": repo['owner'], "name": repo['name'], "authorId": graphql_author_id, "cursor": cursor})
+                      repo_node = c_res.get('data', {}).get('repository') or {}
+                      branch_ref = repo_node.get('defaultBranchRef') or {}
+                      history = branch_ref.get('target', {}).get('history', {})
                       
-                  commit_history = branch_ref.get('target', {}).get('history', {}).get('edges', [])
-                  for commit_edge in commit_history:
-                      c = commit_edge['node']
-                      sha = c['oid']
-                      unique_commits[sha] = {
-                          'repo': f"{repo['owner']}/{repo['name']}",
-                          'added': c['additions'],
-                          'removed': c['deletions'],
-                          'date': c['committedDate'],
-                          'type': 'Direct'
-                      }
+                      for commit_edge in history.get('edges', []):
+                          c = commit_edge['node']
+                          sha = c['oid']
+                          unique_commits[sha] = {
+                              'repo': repo_full,
+                              'added': c['additions'],
+                              'removed': c['deletions'],
+                              'date': c['committedDate'],
+                              'type': 'Direct/Primary'
+                          }
 
-              # Phase 2: Fetch valid PR merge commits (Multi-branch support)
-              print("[*] Phase 2: Fetching valid PR merge commits (Multi-branch)...")
-              pr_query = """
-              query($searchQuery: String!) {
-                search(query: $searchQuery, type: ISSUE, first: 100) {
-                  edges {
-                    node {
-                      ... on PullRequest {
-                        repository { nameWithOwner owner { login } }
-                        mergeCommit {
-                          oid additions deletions committedDate
-                          authors(first: 10) {
-                            edges {
-                              node { user { login } }
-                            }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-              """
-              pr_edges = []
-              for org in ORG_NAMES:
-                  search_str = f"is:pr is:merged author:{user} org:{org}"
-                  pr_res = run_graphql(pr_query, {"searchQuery": search_str})
-                  pr_edges.extend(pr_res.get('data', {}).get('search', {}).get('edges', []))
-                  
-              for pr_edge in pr_edges:
-                  pr_node = pr_edge.get('node', {})
-                  if not pr_node or not pr_node.get('repository'): continue
-                  
-                  repo_owner = pr_node['repository']['owner']['login']
-                  if repo_owner.upper() not in ORG_SET: continue
-                  
-                  repo_name = pr_node['repository']['nameWithOwner']
-                  merge_commit = pr_node.get('mergeCommit')
-                  
-                  if not merge_commit: continue
-                      
-                  sha = merge_commit['oid']
-                  
-                  is_author = False
-                  authors_edges = merge_commit.get('authors', {}).get('edges', [])
-                  for a_edge in authors_edges:
-                      a_user = a_edge.get('node', {}).get('user', {})
-                      if a_user and a_user.get('login', '').lower() == user.lower():
-                          is_author = True
+                      if history.get('pageInfo', {}).get('hasNextPage'):
+                          cursor = history['pageInfo']['endCursor']
+                      else:
                           break
+
+              # ==========================================
+              # Phase 4: Resolving the Deep Search Commits
+              # ==========================================
+              print("[*] Phase 4: Resolving line additions/deletions for Squashed and Co-authored commits...")
+              commits_by_repo = {}
+              for owner, repo_name, sha in commits_to_fetch:
+                  if sha in unique_commits: continue
+                  repo_full = f"{owner}/{repo_name}"
+                  if repo_full not in commits_by_repo:
+                      commits_by_repo[repo_full] = []
+                  commits_by_repo[repo_full].append(sha)
+                  
+              for repo_full, shas in commits_by_repo.items():
+                  owner, repo_name = repo_full.split('/')
+                  chunk_size = 40
+                  for i in range(0, len(shas), chunk_size):
+                      chunk = shas[i:i+chunk_size]
+                      query_parts = []
+                      for idx, sha in enumerate(chunk):
+                          query_parts.append(f'commit_{idx}: object(oid: "{sha}") {{ ... on Commit {{ oid additions deletions committedDate message authors(first: 5) {{ edges {{ node {{ name user {{ login }} }} }} }} }} }}')
+                      
+                      gql_query = f'query {{ repository(owner: "{owner}", name: "{repo_name}") {{ {" ".join(query_parts)} }} }}'
+                      res = run_graphql(gql_query)
+                      repo_data = res.get('data', {}).get('repository') or {}
+                      
+                      for idx, sha in enumerate(chunk):
+                          c = repo_data.get(f"commit_{idx}")
+                          if not c: continue
                           
-                  if is_author and sha not in unique_commits:
-                      unique_commits[sha] = {
-                          'repo': repo_name,
-                          'added': merge_commit['additions'],
-                          'removed': merge_commit['deletions'],
-                          'date': merge_commit['committedDate'],
-                          'type': 'PR'
-                      }
+                          is_verified = False
+                          for a_edge in c.get('authors', {}).get('edges', []):
+                              node = a_edge.get('node', {})
+                              a_user = node.get('user')
+                              if a_user and a_user.get('login', '').lower() == user.lower():
+                                  is_verified = True
+                                  break
+                              if node.get('name', '').lower() == user.lower() or (github_real_name and node.get('name', '').lower() == github_real_name.lower()):
+                                  is_verified = True
+                                  break
+                                  
+                          if not is_verified:
+                              msg = c.get('message', '').lower()
+                              u_lower = user.lower()
+                              r_lower = github_real_name.lower() if github_real_name else None
+                              if (u_lower in msg) or (r_lower and r_lower in msg):
+                                  if "co-authored-by:" in msg or "signed-off-by:" in msg:
+                                      is_verified = True
+                                      
+                          if is_verified:
+                              unique_commits[sha] = {
+                                  'repo': repo_full,
+                                  'added': c.get('additions', 0),
+                                  'removed': c.get('deletions', 0),
+                                  'date': c.get('committedDate', ''),
+                                  'type': 'Deep-Search-Resolved'
+                              }
 
               total_commits = len(unique_commits)
               
