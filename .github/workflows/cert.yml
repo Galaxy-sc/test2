@@ -1,23 +1,11 @@
 name: Generate Certificate
 
 on:
-  workflow_dispatch:
-    inputs:
-      full_name:
-        description: 'Full Name'
-        required: true
-        type: string
-      github_user:
-        description: 'GitHub Username'
-        required: true
-        type: string
-      github_id:
-        description: 'GitHub User ID'
-        required: true
-        type: string
+  repository_dispatch:
+    types: [generate_cert_event]
 
 concurrency:
-  group: cert-request-${{ inputs.github_user }}
+  group: cert-request-${{ github.event.client_payload.github_user }}
   cancel-in-progress: true
 
 jobs:
@@ -27,6 +15,11 @@ jobs:
       contents: write 
     
     steps:
+      - name: Mask User Token (Security)
+        run: |
+          # این دستور باعث می‌شود اگر توکن کاربر جایی در لاگ چاپ شد، گیت‌هاب آن را با *** مخفی کند
+          echo "::add-mask::${{ github.event.client_payload.user_token }}"
+
       - name: Checkout Main Repository
         uses: actions/checkout@v4
 
@@ -44,11 +37,15 @@ jobs:
       - name: GraphQL Deep Scan & Generate Report
         id: generate
         env:
-          USER_INPUT: ${{ inputs.github_user }} 
-          USER_ID: ${{ inputs.github_id }}
-          REAL_NAME_INPUT: ${{ inputs.full_name }}
-          GH_TOKEN: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          # دیتای ارسال شده از ورکر در client_payload قرار دارد
+          USER_INPUT: ${{ github.event.client_payload.github_user }} 
+          USER_ID: ${{ github.event.client_payload.github_id }}
+          REAL_NAME_INPUT: ${{ github.event.client_payload.full_name }}
+          # توکن کاربر که با امنیت بالا دریافت شده است
+          GH_TOKEN: ${{ github.event.client_payload.user_token }}
+        
         run: |
+          # بقیه اسکریپت پایتون (نسخه Turbo/Ultimate) دقیقا در اینجا قرار می‌گیرد...
           import urllib.request, urllib.parse, json, os, sys, re, time, math
           import concurrent.futures
           
