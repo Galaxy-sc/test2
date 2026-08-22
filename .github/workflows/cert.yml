@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write 
-    
+
     steps:
       - name: Mask User Token (Security)
         run: |
@@ -43,7 +43,7 @@ jobs:
         run: |
           import urllib.request, urllib.parse, json, os, sys, re, time, math
           import concurrent.futures
-          
+
           now = time.time()
           user = os.environ.get('USER_INPUT', '')
           user_id = os.environ.get('USER_ID', '')
@@ -51,9 +51,9 @@ jobs:
           gh_token = os.environ.get('GH_TOKEN', '')
           ORG_NAMES = ['OWASP', 'GenAI-Security-Project']
           ORG_SET = {o.upper() for o in ORG_NAMES}
-              
+
           cooldown_seconds = 86400
-          
+
           cert_path = f"db_branch/certs/{user_id}.json"
           attempt_path = f"db_branch/attempts/{user_id}.json"
 
@@ -68,14 +68,14 @@ jobs:
                       "apply_limit": apply_limit
                   }, f)
               sys.exit(1)
-              
+
           try:
               last_time = 0
               if os.path.exists(cert_path):
                   with open(cert_path, "r", encoding="utf-8") as f:
                       try: last_time = max(last_time, json.load(f).get("last_issued", 0))
                       except: pass
-                      
+
               if os.path.exists(attempt_path):
                   with open(attempt_path, "r", encoding="utf-8") as f:
                       try: 
@@ -83,7 +83,7 @@ jobs:
                           if att_data.get("apply_limit") is True or "No verified commits" in att_data.get("message", ""):
                               last_time = max(last_time, att_data.get("last_attempt", 0))
                       except: pass
-                      
+
               if cooldown_seconds > 0 and last_time > 0 and (now - last_time) < cooldown_seconds:
                   abort_with_error("Rate Limit Exceeded. Cooldown active.", apply_limit=True)
 
@@ -91,7 +91,7 @@ jobs:
                   abort_with_error("Input Error: Name exceeds 20 characters.")
               if re.search(r'[^\w\s.\-]', raw_name):
                   abort_with_error("Input Error: Name contains restricted characters.")
-                  
+
               real_name = raw_name if raw_name else user
 
               headers = {
@@ -126,14 +126,14 @@ jobs:
               print(f"[*] Fetching Identity for: {user}...")
               user_query = """query($login: String!) { user(login: $login) { id name createdAt } }"""
               user_res = run_graphql(user_query, {"login": user})
-              
+
               if not user_res or 'errors' in user_res or not user_res.get('data', {}).get('user'):
                   abort_with_error(f"User Not Found: {user}")
-                  
+
               graphql_author_id = user_res['data']['user']['id']
               github_real_name = user_res['data']['user'].get('name') or ''
               created_at = user_res['data']['user']['createdAt']
-              
+
               unique_commits = {}
               target_repos_dict = {}
               commits_to_fetch = set()
@@ -144,7 +144,7 @@ jobs:
               print("[*] Phase 1: Fast Threaded REST Search (Squashed/Co-authored)...")
               search_headers = headers.copy()
               search_headers['Accept'] = 'application/vnd.github+json'
-              
+
               queries_to_run = set()
               for org in ORG_NAMES:
                   for qualifier in ['org', 'user']:
@@ -202,7 +202,7 @@ jobs:
                   query_parts = []
                   for y in chunk:
                       query_parts.append(f'y{y}: contributionsCollection(from: "{y}-01-01T00:00:00Z", to: "{y}-12-31T23:59:59Z") {{ commitContributionsByRepository(maxRepositories: 100) {{ repository {{ nameWithOwner owner {{ login }} name }} }} }}')
-                  
+
                   graph_query = f"query($login: String!) {{ user(login: $login) {{ {' '.join(query_parts)} }} }}"
                   try:
                       graph_res = run_graphql(graph_query, {"login": user})
@@ -255,7 +255,7 @@ jobs:
                           repo_node = c_res.get('data', {}).get('repository') or {}
                           branch_ref = repo_node.get('defaultBranchRef') or {}
                           history = branch_ref.get('target', {}).get('history', {})
-                          
+
                           for edge in history.get('edges', []):
                               c = edge['node']
                               local_c[c['oid']] = {
@@ -286,7 +286,7 @@ jobs:
                   if repo_full not in commits_by_repo:
                       commits_by_repo[repo_full] = []
                   commits_by_repo[repo_full].append(sha)
-                  
+
               chunks_to_process = []
               for repo_full, shas in commits_by_repo.items():
                   owner, repo_name = repo_full.split('/')
@@ -298,16 +298,16 @@ jobs:
                   query_parts = []
                   for idx, sha in enumerate(chunk):
                       query_parts.append(f'c{idx}: object(oid: "{sha}") {{ ... on Commit {{ oid additions deletions committedDate message authors(first: 5) {{ edges {{ node {{ name user {{ login }} }} }} }} }} }}')
-                  
+
                   gql_query = f'query {{ repository(owner: "{owner}", name: "{repo_name}") {{ {" ".join(query_parts)} }} }}'
                   try:
                       res = run_graphql(gql_query)
                       repo_data = res.get('data', {}).get('repository') or {}
-                      
+
                       for idx, sha in enumerate(chunk):
                           c = repo_data.get(f"c{idx}")
                           if not c: continue
-                          
+
                           is_verified = False
                           for a_edge in c.get('authors', {}).get('edges', []):
                               node = a_edge.get('node', {})
@@ -318,7 +318,7 @@ jobs:
                               if node.get('name', '').lower() == user.lower() or (github_real_name and node.get('name', '').lower() == github_real_name.lower()):
                                   is_verified = True
                                   break
-                                  
+
                           if not is_verified:
                               msg = c.get('message', '').lower()
                               u_lower = user.lower()
@@ -326,7 +326,7 @@ jobs:
                               if (u_lower in msg) or (r_lower and r_lower in msg):
                                   if "co-authored-by:" in msg or "signed-off-by:" in msg:
                                       is_verified = True
-                                      
+
                           if is_verified:
                               local_c[sha] = {
                                   'repo': f"{owner}/{repo_name}", 'added': c.get('additions', 0),
@@ -343,13 +343,13 @@ jobs:
                       unique_commits.update(rescued)
 
               total_commits = len(unique_commits)
-              
+
               if total_commits == 0:
                   abort_with_error("No verified commits found in the OWASP or GenAI Security Project repositories.", apply_limit=True)
 
               total_added = sum(c['added'] for c in unique_commits.values())
               total_removed = sum(c['removed'] for c in unique_commits.values())
-              
+
               raw_total = total_added + total_removed
               first_commit_date = min(c['date'] for c in unique_commits.values())
               first_commit_display = first_commit_date.split('T')[0] if first_commit_date else "N/A"
@@ -363,7 +363,7 @@ jobs:
               GOLD_THRESHOLD = 0.006063
 
               log_raw = math.log1p(raw_total)
-              
+
               if log_raw > OUTLIER_UPPER:
                   tier = "Gold"
                   final_score = "Exceptional"
@@ -371,10 +371,10 @@ jobs:
                   add_norm = min(total_added / P99_ADD, 1.0) if P99_ADD > 0 else 0
                   del_norm = min(total_removed / P99_DEL, 1.0) if P99_DEL > 0 else 0
                   cmt_norm = min(total_commits / P99_CMT, 1.0) if P99_CMT > 0 else 0
-                  
+
                   score = (add_norm * 0.50) + (del_norm * 0.40) + (cmt_norm * 0.10)
                   final_score = f"{score:.6f}"
-                  
+
                   if score >= GOLD_THRESHOLD: tier = "Gold"
                   elif score >= SILVER_THRESHOLD: tier = "Silver"
                   else: tier = "Bronze"
@@ -384,19 +384,20 @@ jobs:
                   r_name = data['repo']
                   if r_name not in repo_stats:
                       repo_stats[r_name] = {'commits': 0, 'added': 0, 'removed': 0}
-                      
+
                   repo_stats[r_name]['commits'] += 1
                   repo_stats[r_name]['added'] += data['added']
                   repo_stats[r_name]['removed'] += data['removed']
 
               total_projects = len(repo_stats)
+              repo_list = list(repo_stats.keys())
 
               if os.path.exists(attempt_path):
                   try: os.remove(attempt_path)
                   except: pass
 
               cert_id = user_id
-              
+
               payload = {
                   "id": cert_id,
                   "user": user, 
@@ -409,15 +410,16 @@ jobs:
                       "merged_commits": str(total_commits),
                       "project_count": str(total_projects),
                       "lines_added": str(total_added), 
-                      "lines_removed": str(total_removed)
+                      "lines_removed": str(total_removed),
+                      "repositories": repo_list
                   }
               }
-              
+
               os.makedirs("db_branch/certs", exist_ok=True)
               file_path = f"db_branch/certs/{cert_id}.json"
               with open(file_path, "w", encoding="utf-8") as f:
                   json.dump(payload, f, ensure_ascii=False, indent=2)
-                  
+
               print(f"[*] Process complete. Certificate updated for {user}.")
           except Exception as e:
               abort_with_error(f"Internal Processing Error: {str(e)}")
