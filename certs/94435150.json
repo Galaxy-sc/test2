@@ -13,6 +13,16 @@
     "lines_removed": "1351",
     "repositories": [
       "OWASP/wstg",
+      "OWASP/OWASP-CRT",
+      "OWASP/wstg",
+      "OWASP/OWASP-CRT",
+      "OWASP/wstg",
+      "OWASP/OWASP-CRT",
+      "OWASP/wstg",
+      "OWASP/OWASP-CRT",
+      "OWASP/wstg",
+      "OWASP/OWASP-CRT",
+      "OWASP/wstg",
       "OWASP/OWASP-CRT"
     ]
   }
