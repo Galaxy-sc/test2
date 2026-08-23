@@ -408,7 +408,8 @@ jobs:
                       "merged_commits": str(total_commits),
                       "project_count": str(total_projects),
                       "lines_added": str(total_added), 
-                      "lines_removed": str(total_removed)
+                      "lines_removed": str(total_removed),
+                      "repositories": repo_list
                   }
               }
               
