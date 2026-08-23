@@ -389,6 +389,7 @@ jobs:
                   repo_stats[r_name]['removed'] += data['removed']
 
               total_projects = len(repo_stats)
+              repo_list = list(repo_stats.keys())
 
               if os.path.exists(attempt_path):
                   try: os.remove(attempt_path)
