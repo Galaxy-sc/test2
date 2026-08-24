@@ -120,9 +120,9 @@ const App = () => {
         <div className="absolute bottom-[-30%] right-[-10%] w-[70vw] h-[70vw] bg-[radial-gradient(circle,rgba(74,123,254,0.08)_0%,transparent_60%)] rounded-full [animation:floatOrb_15s_infinite_alternate-reverse_ease-in-out]"></div>
         <div className="absolute inset-0 z-[1] bg-[url('data:image/svg+xml;utf8,%3Csvg_viewBox=%220_0_200_200%22_xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter_id=%22noise%22%3E%3CfeTurbulence_type=%22fractalNoise%22_baseFrequency=%220.8%22_numOctaves=%223%22_stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect_width=%22100%25%22_height=%22100%25%22_filter=%22url(%23noise)%22_opacity=%220.03%22/%3E%3C/svg%3E')] pointer-events-none"></div>
       </div>
-      
+
       <Taskbar windows={windows} toggleWindow={toggleWindow} overviewMode={overviewMode} toggleOverview={() => setOverviewMode(!overviewMode)} />
-      
+
       <DesktopIcons 
         toggleWindow={toggleWindow} 
         tutorialStep={tutorialStep} 
@@ -130,20 +130,25 @@ const App = () => {
         telemetryData={telemetryData} 
         certId={certTargetId} 
       />
-      
+
       <div id="window-manager" className={`absolute inset-0 z-[10000] pointer-events-none ${overviewMode ? 'overview-mode' : ''}`} onClick={(e) => { if (e.target.id === 'window-manager') setOverviewMode(false); }}>
+        
         <OSWindow id="guide-win" {...windows.guide} onClose={() => closeWindow('guide')} onMinimize={() => toggleWindow('guide')} onMaximize={() => toggleMaximize('guide')} onFocus={() => focusWindow('guide')}>
           <SystemGuide />
         </OSWindow>
+
         <OSWindow id="letter-win" {...windows.letter} onClose={() => closeWindow('letter')} onMinimize={() => toggleWindow('letter')} onMaximize={() => toggleMaximize('letter')} onFocus={() => focusWindow('letter')}>
           <LetterOfAppreciation startTyping={openedOnce.letter} />
         </OSWindow>
+
         <OSWindow id="tool-win" {...windows.tool} onClose={() => closeWindow('tool')} onMinimize={() => toggleWindow('tool')} onMaximize={() => toggleMaximize('tool')} onFocus={() => focusWindow('tool')}>
           <TerminalEngine startFlow={openedOnce.tool} />
         </OSWindow>
+
         <OSWindow id="cert-win" {...windows.cert} onClose={() => closeWindow('cert')} onMinimize={() => toggleWindow('cert')} onMaximize={() => toggleMaximize('cert')} onFocus={() => focusWindow('cert')}>
           <CertificateViewer certId={certTargetId} isMaximized={windows.cert.isMaximized} setTelemetryData={setTelemetryData} />
         </OSWindow>
+
       </div>
     </div>
   );

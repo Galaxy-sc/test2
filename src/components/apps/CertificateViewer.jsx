@@ -21,6 +21,7 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
 
   useEffect(() => {
     const fetchData = async () => {
+      // Clear data immediately on ID change to prevent ghosting
       if (!certId) {
         setIsLoading(false);
         setError("NO_ID_PROVIDED");
@@ -41,6 +42,7 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
         let data = null;
 
         if (isFresh) {
+          // Attempt to fetch directly from GitHub API (cache-free)
           try {
             const apiUrl = `https://api.github.com/repos/${APP_CONFIG.github.owner}/${APP_CONFIG.github.repo}/contents/certs/${certId}.json?ref=${APP_CONFIG.github.branch}&t=${new Date().getTime()}`;
             const apiResponse = await fetch(apiUrl);
@@ -49,6 +51,9 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
               const apiJson = await apiResponse.json();
               const decodedContent = decodeURIComponent(escape(atob(apiJson.content)));
               data = JSON.parse(decodedContent);
+
+              // Remove 'fresh' parameter from URL without triggering a page reload
+              // Prevents API rate-limiting if the user copies and shares the link
               window.history.replaceState(null, '', `?id=${certId}`);
             }
           } catch (apiErr) {
@@ -56,6 +61,7 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
           }
         }
 
+        // Fall back to high-speed CDN if API was skipped or failed
         if (!data) {
           const rawUrl = `https://raw.githubusercontent.com/${APP_CONFIG.github.owner}/${APP_CONFIG.github.repo}/${APP_CONFIG.github.branch}/certs/${certId}.json?t=${new Date().getTime()}`;
           const rawResponse = await fetch(rawUrl);
@@ -81,6 +87,7 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
     fetchData();
   }, [certId, setTelemetryData]);
 
+  // Derived state to prevent error flashes during ID transition
   const activeError = (certId && certId !== fetchedId) ? null : error;
 
   useEffect(() => {
@@ -152,7 +159,7 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
     };
 
     const generateQRCodeAdvanced = (options = {}) => {
-      const { size = 250, color = '#1a1a2e' } = options;
+      const { size = 320, color = '#1a1a2e' } = options;
       const qr = qrcode(0, 'H');
       const qrUrl = window.location.href.includes('?id=') ? window.location.href : `${APP_CONFIG.domain}/?id=${certUser.id || "0"}`;
       qr.addData(qrUrl); qr.make();
@@ -276,14 +283,14 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
           break;
       }
       
-      ctx.font = "200 55px 'Inter'"; 
+      ctx.font = "200 62px 'Inter'";
       const textLines = calculateLines(ctx, certText, 2100);
       const startY = 1840;
       const lineHeight = 95;
       const paddingBottom = 10;
       const dynamicRepoY = startY + (textLines * lineHeight) + paddingBottom;
       
-      ctx.globalAlpha = 0.25; 
+      ctx.globalAlpha = 0.45; 
       if (images.current.pattern.complete && images.current.pattern.naturalWidth !== 0) {
         ctx.drawImage(images.current.pattern, 0, 0, 2480, 3508);
       }
@@ -336,9 +343,9 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
       ctx.font = `400 ${nameFontSize}px 'Anton'`;
       ctx.fillText(displayName, 190, 1680);
       
-      ctx.font = "italic 400 70px 'Inter'";
+      ctx.font = "italic 400 60px 'Inter'";
       const projectCount = certUser.stats?.project_count || 1;
-      ctx.fillText(`${projectCount} ${projectCount === 1 ? 'Repository' : 'Repositories'}`, 190, dynamicRepoY);
+      ctx.fillText(`${projectCount} ${Number(projectCount) === 1 ? 'Repository' : 'Repositories'}`, 190, dynamicRepoY);
       
       ctx.font = "bold 90px 'Montserrat'"; ctx.fillText("Meysam Bal-afkan", 190, 2850); ctx.fillText("Fatemeh Zahedi", 1510, 2850);
       ctx.font = "400 50px 'Inter'"; ctx.fillText("OWASP-CRT Project Leader", 190, 2930); ctx.fillText("OWASP-CRT Project Co-Leader", 1510, 2930);
@@ -420,11 +427,10 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
           document.fonts.load('bold 200px "Cascadia Mono"'),
           document.fonts.load('400 100px "Cascadia Code"')
         ]).then(() => {
-          // [!] مکانیزم ضدسافاری: اضافه کردن دابل‌چک و تاخیر برای اطمینان از نقاشی شدن فونت‌ها در آیفون
           document.fonts.ready.then(() => {
              setTimeout(() => {
                renderCertificate();
-             }, 250); // 250ms تاخیر برای لود شدن حتمی فونت‌ها در iOS
+             }, 250); 
           });
         }).catch((e) => {
           console.warn("Font pre-loading failed, rendering anyway:", e);
@@ -460,9 +466,9 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
   };
 
   return (
-    <div className="relative w-full h-full overflow-hidden">
+    <div className="relative w-full h-full overflow-hidden flex flex-col">
       
-      {/* [!] مکانیزم ضدسافاری: تگ‌های مخفیِ اجباری روی صفحه (به جای خارج از صفحه) */}
+      {/* Anti-WebKit font loading bypass elements */}
       <div style={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', opacity: 0.01, pointerEvents: 'none', zIndex: -1 }}>
         <span style={{ fontFamily: 'Anton', fontWeight: 400 }}>Preload</span>
         <span style={{ fontFamily: 'Inter', fontWeight: 100 }}>Preload</span>
@@ -490,7 +496,7 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
         </div>
       )}
       
-      <div className="w-full h-full overflow-hidden bg-[#0a0b10] flex justify-center items-center p-[25px] rounded-b-[11px] max-md:p-[20px_10px]">
+      <div className="w-full h-full bg-[#0a0b10] flex justify-center items-center overflow-auto p-4 md:p-[25px] rounded-b-[11px]">
         {activeError ? (
           renderErrorState()
         ) : (
@@ -507,10 +513,10 @@ const CertificateViewer = ({ certId, isMaximized, setTelemetryData }) => {
               <img 
                 src={previewImage} 
                 alt="OWASP Certificate Preview" 
-                className="max-w-full max-h-full w-auto h-auto aspect-[2480/3508] block shadow-[0_15px_40px_rgba(0,0,0,0.8)]"
+                className="m-auto object-contain max-w-full max-h-full w-auto h-auto block shadow-[0_15px_40px_rgba(0,0,0,0.8)] rounded-[4px]"
               />
             ) : (
-              <div className="text-[#4a7bfe] font-['Fira_Code',monospace] text-xs animate-pulse">
+              <div className="text-[#4a7bfe] font-['Fira_Code',monospace] text-xs animate-pulse m-auto">
                 [+] RENDERING MATRIX...
               </div>
             )}
