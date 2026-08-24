@@ -62,51 +62,113 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
     }
   }, [telemetryData]);
 
-  const handleGeneratePDF = () => { /* ... */ };
-  const handleAddToLinkedIn = () => { /* ... */ };
-  const handleIconClick = (action) => { if (isTouchMode) action(); };
-  const handleIconDoubleClick = (action) => { if (!isTouchMode) action(); };
+  const handleGeneratePDF = () => {
+    if (!certId) {
+      alert("[!] SYSTEM ERROR: No valid identity parameter (?id=) found. Access Denied.");
+      return;
+    }
+
+    const canvas = document.getElementById('cert-canvas');
+    if (!canvas) {
+      alert("[!] SYSTEM ERROR: Certificate matrix is not loaded. Please open Identity Viewer first.");
+      return;
+    }
+
+    try {
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+      pdf.save(`OWASP_CRT_Certificate_${certId}.pdf`);
+    } catch (err) {
+      console.error(err);
+      alert("[!] ERROR: Failed to compile PDF sequence.");
+    }
+  };
+
+  const handleAddToLinkedIn = () => {
+    if (!certId) {
+      alert("[!] SYSTEM ERROR: Cannot add to LinkedIn without a valid identity.");
+      return;
+    }
+
+    const tier = (telemetryData?.tier || "Bronze").toUpperCase();
+    let certName = "OWASP Verified Contributor";
+    if (tier === 'SILVER') certName = "OWASP Advanced Contributor";
+    if (tier === 'GOLD') certName = "OWASP Elite Contributor";
+
+    const organizationName = "OWASP® Foundation";
+    
+    let issueYear = new Date().getFullYear();
+    let issueMonth = new Date().getMonth() + 1;
+
+    if (telemetryData?.stats?.first_commit_date) {
+      const dateParts = telemetryData.stats.first_commit_date.split('-');
+      if (dateParts.length >= 2) {
+        issueYear = parseInt(dateParts[0], 10);
+        issueMonth = parseInt(dateParts[1], 10);
+      }
+    } else if (telemetryData?.stats?.first_commit) { 
+      issueYear = parseInt(telemetryData.stats.first_commit, 10);
+      issueMonth = 1;
+    }
+
+    const certUrl = `https://crt.owasp.org/?id=${certId}`;
+    const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(certName)}&organizationName=${encodeURIComponent(organizationName)}&issueYear=${issueYear}&issueMonth=${issueMonth}&certUrl=${encodeURIComponent(certUrl)}&certId=${encodeURIComponent(certId)}`;
+    
+    window.open(linkedInUrl, '_blank');
+  };
+
+  const handleIconClick = (action) => {
+    if (isTouchMode) action();
+  };
+
+  const handleIconDoubleClick = (action) => {
+    if (!isTouchMode) action();
+  };
 
   return (
-    <div id="desktop" className="absolute top-[85px] left-0 w-full h-[calc(100%-85px)] z-10 max-md:top-[60px] max-md:h-[calc(100%-60px)]">
+    <div id="desktop" className="absolute top-[85px] left-0 w-full h-[calc(100dvh-85px)] z-10 max-md:top-[60px] max-md:h-[calc(100dvh-60px)] overflow-hidden">
       
-      {/* Telemetry Panel (Bottom Sheet on Mobile, Fixed Right on Desktop) */}
+      {/* 
+        کد استاندارد و تمیز: 
+        استفاده از fixed bottom-0 در موبایل به همراه max-h داینامیک
+      */}
       <div 
         className={`
-          absolute z-50 bg-[#0b0d13]/95 backdrop-blur-xl border border-[rgba(255,255,255,0.06)] 
-          font-['Fira_Code',monospace] shadow-[0_20px_40px_rgba(0,0,0,0.8)] transition-all duration-500 flex flex-col overflow-hidden
+          z-[100] bg-[#0b0d13]/95 backdrop-blur-xl border border-[rgba(255,255,255,0.06)] font-['Fira_Code',monospace] 
+          shadow-[0_-10px_40px_rgba(0,0,0,0.5)] transition-[max-height] duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] 
+          flex flex-col overflow-hidden
           
-          /* Desktop Styles */
-          md:right-[20px] md:top-[20px] md:w-[320px] md:rounded-[14px] md:h-auto
+          /* Desktop */
+          md:absolute md:right-[20px] md:top-[20px] md:w-[320px] md:rounded-[14px] md:max-h-[calc(100%-40px)]
           
-          /* Mobile Styles */
-          max-md:left-0 max-md:bottom-0 max-md:w-full max-md:rounded-t-[24px] max-md:border-x-0 max-md:border-b-0 max-md:border-t-white/10
-          ${isMobileExpanded ? 'max-md:h-[85vh]' : 'max-md:h-[110px]'}
+          /* Mobile */
+          max-md:fixed max-md:left-0 max-md:bottom-0 max-md:w-full max-md:rounded-t-[24px] max-md:border-x-0 max-md:border-b-0
+          ${isMobileExpanded ? 'max-md:max-h-[85dvh]' : 'max-md:max-h-[105px]'}
         `}
       >
         
-        {/* بخش هدر پنل */}
+        {/* هدر کشویی */}
         <div 
-          className={`
-            shrink-0 transition-colors md:p-[16px] max-md:p-[15px] max-md:pt-[12px]
-            ${isTouchMode ? 'cursor-pointer hover:bg-white/[0.02] active:bg-white/[0.04]' : ''}
-          `}
+          className={`shrink-0 transition-colors md:p-[16px] max-md:p-[15px] max-md:pt-[12px] max-md:h-[105px] ${isTouchMode ? 'cursor-pointer hover:bg-white/[0.02] active:bg-white/[0.04]' : ''}`}
           onClick={() => {
-            if (isTouchMode) setIsMobileExpanded(!isMobileExpanded);
+            if (isTouchMode || window.innerWidth <= 768) setIsMobileExpanded(!isMobileExpanded);
           }}
         >
-          {/* 
-            هندل درگ جدید (Chevron عریض) 
-            جایگزین خط صاف قبلی و پیکان بنفش شد
-          */}
+          {/* Chevron */}
           <svg 
-            className={`md:hidden w-[40px] h-[12px] mx-auto mb-3 text-white/30 transition-all duration-500 ${isMobileExpanded ? 'rotate-180' : 'animate-[bounce_2s_infinite] hover:text-white/50'}`}
+            className={`md:hidden w-[40px] h-[12px] mx-auto mb-3 text-white/30 transition-transform duration-500 ${isMobileExpanded ? 'rotate-180' : 'animate-[bounce_2s_infinite]'}`}
             fill="none" viewBox="0 0 24 8" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"
           >
             <polyline points="2,7 12,2 22,7" />
           </svg>
 
-          {/* عنوان و وضعیت */}
+          {/* عنوان */}
           <div className="flex justify-between items-center">
             <div className="text-[10px] text-white tracking-[1.5px] font-bold">
               CONTRIBUTOR_TELEMETRY
@@ -117,8 +179,8 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
             </div>
           </div>
 
-          {/* خلاصه وضعیت - فقط وقتی بسته است نمایش داده می‌شود */}
-          <div className={`md:hidden flex justify-between items-center transition-all duration-300 overflow-hidden ${isMobileExpanded ? 'opacity-0 h-0 mt-0' : 'opacity-100 h-[30px] mt-2'}`}>
+          {/* خلاصه وضعیت - در حالت بسته نمایش داده می‌شود */}
+          <div className={`md:hidden flex justify-between items-center transition-all duration-300 mt-2 ${isMobileExpanded ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
             <div className="flex gap-6">
               <div>
                 <div className="text-[8px] text-slate-400 mb-0.5">COMMITS</div>
@@ -135,13 +197,8 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
           </div>
         </div>
 
-        {/* محتوای کامل پنل */}
-        <div className={`
-          flex-1 flex flex-col custom-scrollbar overflow-y-auto px-[16px] pb-[16px]
-          transition-opacity duration-500
-          ${isMobileExpanded ? 'opacity-100 max-md:delay-150' : 'max-md:opacity-0 max-md:pointer-events-none'}
-          md:opacity-100
-        `}>
+        {/* بخش محتوای داخلی */}
+        <div className="flex-1 flex flex-col custom-scrollbar overflow-y-auto px-[16px] pb-[16px] max-md:px-[15px] max-md:pb-[env(safe-area-inset-bottom,15px)]">
           
           <div className="flex gap-2.5 mb-2.5 shrink-0">
             <div className="flex-1 bg-white/[0.02] border border-white/5 rounded-[8px] p-2.5 relative overflow-hidden group hover:bg-white/[0.04] transition-colors">
@@ -284,7 +341,6 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
             </div>
           </div>
 
-          {/* دکمه بستن پنل */}
           <button 
             className="md:hidden mt-5 w-full py-3 bg-white/[0.03] border border-white/10 rounded-[8px] text-slate-400 hover:text-white text-[10px] font-bold tracking-widest active:bg-white/10 shrink-0 transition-colors flex items-center justify-center gap-2"
             onClick={(e) => { e.stopPropagation(); setIsMobileExpanded(false); }}
@@ -294,9 +350,8 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
         </div>
       </div>
 
-      <div className="flex flex-col gap-[30px] p-[30px] max-md:p-[15px] max-md:pb-[140px] max-md:gap-[15px] max-md:flex-row max-md:flex-wrap">
+      <div className="flex flex-col gap-[30px] p-[30px] max-md:p-[15px] max-md:pb-[130px] max-md:gap-[15px] max-md:flex-row max-md:flex-wrap">
         
-        {/* آیکون اول */}
         <div className="relative w-[90px] inline-block">
           <div 
             className="w-full text-center cursor-pointer p-3 rounded-[8px] transition-all duration-200 border border-transparent relative z-10 hover:bg-[rgba(157,78,221,0.15)] hover:border-[rgba(157,78,221,0.3)] group"
@@ -312,7 +367,6 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
           </div>
         </div>
 
-        {/* آیکون دوم */}
         <div className="relative w-[90px] inline-block">
           <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full p-[15px] rounded-[12px] opacity-0 pointer-events-none z-[1] border-2 border-[#ff2a5f] ${tutorialStep === 1 ? 'animate-[pingRing_1.5s_cubic-bezier(0,0,0.2,1)_infinite] opacity-100' : ''}`}></div>
           <div 
@@ -325,7 +379,6 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
           </div>
         </div>
 
-        {/* آیکون سوم */}
         <div className="relative w-[90px] inline-block">
           <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full p-[15px] rounded-[12px] opacity-0 pointer-events-none z-[1] border-2 border-[#9d4edd] ${tutorialStep === 2 ? 'animate-[pingRing_1.5s_cubic-bezier(0,0,0.2,1)_infinite] opacity-100' : ''}`}></div>
           <div 
@@ -338,7 +391,6 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
           </div>
         </div>
 
-        {/* آیکون چهارم */}
         <div className="relative w-[90px] inline-block">
           <div 
             className={`w-full text-center cursor-pointer p-3 rounded-[8px] transition-all duration-200 border border-transparent relative z-10 hover:bg-[rgba(157,78,221,0.15)] hover:border-[rgba(157,78,221,0.3)] group ${!certId ? 'opacity-50 grayscale' : ''}`}
@@ -358,7 +410,6 @@ const DesktopIcons = ({ toggleWindow, tutorialStep, advanceTutorial, telemetryDa
           </div>
         </div>
 
-        {/* آیکون پنجم */}
         <div className="relative w-[90px] inline-block">
           <div 
             className={`w-full text-center cursor-pointer p-3 rounded-[8px] transition-all duration-200 border border-transparent relative z-10 hover:bg-[#0077b5]/15 hover:border-[#0077b5]/30 group ${!certId ? 'opacity-50 grayscale' : ''}`}
