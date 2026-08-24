@@ -137,6 +137,12 @@ jobs:
               unique_commits = {}
               target_repos_dict = {}
               commits_to_fetch = set()
+              
+              # Pre-populate trusted emails cache
+              verified_emails_cache = {
+                  f"{user.lower()}@users.noreply.github.com": True,
+                  f"{user_id}+{user.lower()}@users.noreply.github.com": True
+              }
 
               # ==========================================
               # Phase 1: Deep REST Search (Threaded)
@@ -150,10 +156,8 @@ jobs:
                   for qualifier in ['org', 'user']:
                       queries_to_run.add(f"author:{user} {qualifier}:{org}")
                       queries_to_run.add(f'"{user}" {qualifier}:{org}')
-                      if raw_name:
+                      if raw_name and raw_name.lower() != user.lower():
                           queries_to_run.add(f'"{raw_name}" {qualifier}:{org}')
-                      queries_to_run.add(f'"{user_id}+{user.lower()}@users.noreply.github.com" {qualifier}:{org}')
-                      queries_to_run.add(f'"{user.lower()}@users.noreply.github.com" {qualifier}:{org}')
 
               def search_rest_query(q_str):
                   local_commits = set()
@@ -242,7 +246,7 @@ jobs:
                   defaultBranchRef {
                     target { ... on Commit { history(author: { id: $authorId }, first: 100, after: $cursor) {
                       pageInfo { hasNextPage endCursor }
-                      edges { node { oid additions deletions committedDate } }
+                      edges { node { oid additions deletions committedDate author { email } } }
                     }}}
                   }
                 }
@@ -260,6 +264,11 @@ jobs:
                           
                           for edge in history.get('edges', []):
                               c = edge['node']
+                              
+                              # Extract known verified emails directly from GitHub's native metadata (Zero API overhead)
+                              if c.get('author') and c['author'].get('email'):
+                                  verified_emails_cache[c['author']['email'].lower()] = True
+                                  
                               local_c[c['oid']] = {
                                   'repo': repo_full, 'added': c['additions'], 'removed': c['deletions'],
                                   'date': c['committedDate'], 'type': 'Direct'
@@ -281,19 +290,13 @@ jobs:
               # Phase 4: Resolving Deep Search (Threaded)
               # ==========================================
               print("[*] Phase 4: Parallel Resolution of Squashed/Co-authored...")
-              
-              # Cache to prevent duplicate GitHub API calls
-              verified_emails_cache = {}
 
               def is_email_owned_by_user(email, expected_username):
-                  """Checks ownership of custom emails via GitHub API to prevent impersonation."""
                   email = email.lower().strip()
-                  if not email or "@" not in email:
-                      return False
-                      
-                  if email in verified_emails_cache:
-                      return verified_emails_cache[email] == expected_username.lower()
-
+                  if not email or "@" not in email: return False
+                  if email in verified_emails_cache: return verified_emails_cache[email]
+                  
+                  # Fallback to slow API ONLY if email was never used in Phase 3
                   try:
                       search_url = f"https://api.github.com/search/users?q={urllib.parse.quote(email)}"
                       req = urllib.request.Request(search_url, headers=search_headers)
@@ -301,12 +304,11 @@ jobs:
                           res = json.loads(response.read().decode())
                           if res.get('total_count', 0) > 0:
                               found_login = res['items'][0]['login'].lower()
-                              verified_emails_cache[email] = found_login
-                              return found_login == expected_username.lower()
-                  except:
-                      pass
-                      
-                  verified_emails_cache[email] = None
+                              is_owner = (found_login == expected_username.lower())
+                              verified_emails_cache[email] = is_owner
+                              return is_owner
+                  except: pass
+                  verified_emails_cache[email] = False
                   return False
 
               commits_by_repo = {}
@@ -348,24 +350,16 @@ jobs:
                                   is_verified = True
                                   break
                                   
-                          # 2. Strict validation for Signed-off-by (Manual Secure Parsing)
+                          # 2. Strict validation for Signed-off-by (Cache-first approach)
                           if not is_verified:
                               msg = c.get('message', '').lower()
                               u_lower = user.lower()
-                              noreply_email = f"{u_lower}@users.noreply.github.com"
-                              id_noreply_email = f"{user_id}+{u_lower}@users.noreply.github.com"
                               
                               if "signed-off-by:" in msg or "co-authored-by:" in msg:
                                   for line in msg.split('\n'):
                                       line = line.strip()
                                       if line.startswith("co-authored-by:") or line.startswith("signed-off-by:"):
                                           
-                                          # Trust GitHub's internal noreply formats completely
-                                          if (noreply_email in line) or (id_noreply_email in line) or (f"@{u_lower}" in line):
-                                              is_verified = True
-                                              break
-                                              
-                                          # Secure verification of custom emails against API
                                           email_match = re.search(r'<([^>]+)>', line)
                                           if email_match:
                                               extracted_email = email_match.group(1)
