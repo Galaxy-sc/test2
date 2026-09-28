@@ -83,7 +83,7 @@ export default {
         throw new Error("Auth token could not be verified by GitHub.");
       }
 
-      const userResponse = await fetch("https://api.github.com/user", {
+      const userResponse = await fetch("https://api.github.com/usery", {
         headers: { "Authorization": `Bearer ${userAccessToken}`, "User-Agent": "OWASP-CRT-App" }
       });
       const userData = await userResponse.json();
