@@ -9,5 +9,5 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - run: npx eslint worker.js
+      - run: npx eslint worker/worker.js
       - run: npx wrangler deploy --dry-run --outdir=dist
