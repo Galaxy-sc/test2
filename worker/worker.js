@@ -10,7 +10,7 @@ export default {
 
     const sanitizeFullName = (name) => {
       if (!name) return null;
-      const sanitized = name.replace(/[^a-zA-Z\s\-]/g, '').replace(/\s+/g, ' ').substring(0, 20).trim();
+      const sanitized = name.replace(/[^a-zA-Z\s-]/g, '').replace(/\s+/g, ' ').substring(0, 20).trim();
       return sanitized || null;
     };
 
@@ -60,14 +60,14 @@ export default {
       return new Response("Missing code", { status: 400 });
     }
 
-    let stateName = null;
-    let stateCsrf = null;
+    let stateName;
+    let stateCsrf;
     try {
       if (!rawState) throw new Error("missing state");
       const decodedJson = JSON.parse(decodeURIComponent(escape(atob(rawState))));
       stateCsrf = decodedJson.csrf || null;
       stateName = sanitizeFullName(decodedJson.name);
-    } catch (e) {
+    } catch {
       return new Response("Invalid or malformed state parameter (CSRF Alert)", { status: 403 });
     }
 
