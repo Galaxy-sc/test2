@@ -1,0 +1,26 @@
+{
+  "name": "owasp-crt",
+  "version": "2.0.0",
+  "homepage": "/test2/",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "preview": "vite preview",
+    "build": "vite build && node postbuild.js",
+    "deploy": "gh-pages -d dist"
+  },
+  "dependencies": {
+    "jspdf": "^4.2.1",
+    "lucide-react": "^0.344.0",
+    "qrcode-generator": "^1.4.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.4"
+  }
+}
