@@ -43,6 +43,7 @@ jobs:
           USER_INPUT: ${{ github.event.client_payload.github_user }}
           USER_ID: ${{ github.event.client_payload.github_id }}
           REAL_NAME_INPUT: ${{ github.event.client_payload.full_name }}
+          NAME_HASH_INPUT: ${{ github.event.client_payload.name_hash }}
           GH_TOKEN: ${{ github.event.client_payload.user_token }}
         run: |
           import urllib.request, urllib.parse, json, os, sys, re, time, math
@@ -52,6 +53,7 @@ jobs:
           user = os.environ.get('USER_INPUT', '')
           user_id = os.environ.get('USER_ID', '')
           raw_name = os.environ.get('REAL_NAME_INPUT', '').strip()
+          name_hash = os.environ.get('NAME_HASH_INPUT', '').strip()
           gh_token = os.environ.get('GH_TOKEN', '')
           ORG_NAMES = ['OWASP', 'GenAI-Security-Project']
           ORG_SET = {o.upper() for o in ORG_NAMES}
@@ -95,6 +97,8 @@ jobs:
                   abort_with_error("Input Error: Name exceeds 20 characters.")
               if re.search(r'[^\w\s.\-]', raw_name):
                   abort_with_error("Input Error: Name contains restricted characters.")
+              if name_hash and not re.fullmatch(r'[A-Za-z0-9_-]{43}', name_hash):
+                  abort_with_error("Input Error: Invalid name commitment hash.")
 
               headers = {
                   'Authorization': f'Bearer {gh_token}',
@@ -446,6 +450,9 @@ jobs:
                   }
               }
 
+              if name_hash:
+                  payload["name_hash"] = name_hash
+
               os.makedirs("db_branch/certs", exist_ok=True)
               file_path = f"db_branch/certs/{cert_id}.json"
               with open(file_path, "w", encoding="utf-8") as f:
@@ -504,4 +511,3 @@ jobs:
               exit 1
             fi
           fi
-          
